@@ -1,7 +1,6 @@
 interface ProxyData {
   url: string;
   origin: string;
-  referer: string;
   src: boolean;
 }
 
@@ -27,11 +26,19 @@ function toBase64Url(json: string): string {
   return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-export function createProxyUrl(streamUrl: string): string {
+/**
+ * Build a proxied .m3u8 URL.
+ *
+ * The backend proxy automatically derives the Referer header from
+ * `origin + "/"`, so we only need to send `url` and `origin`.
+ */
+export function createProxyUrl(
+  streamUrl: string,
+  origin: string = "https://cineby.sc",
+): string {
   const proxyData: ProxyData = {
     url: streamUrl,
-    origin: "https://cineby.sc",
-    referer: "https://cineby.sc/",
+    origin,
     src: true,
   };
   const json = JSON.stringify(proxyData);
@@ -41,5 +48,6 @@ export function createProxyUrl(streamUrl: string): string {
 
 export async function fetchHealth(): Promise<HealthInfo> {
   const res = await fetch("https://melana.onrender.com/");
+  if (!res.ok) throw new Error(`health ${res.status}`);
   return res.json();
 }

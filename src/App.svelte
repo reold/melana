@@ -36,7 +36,6 @@
   let watchStreamUrl: string | null = null;
   let watchSubtitles: { url: string; lang: string; language: string }[] = [];
   let watchSources: { quality: string; url: string }[] = [];
-
   let isTransitioning = false;
   let progressMessage = "";
 
@@ -49,10 +48,11 @@
   let healthInfo: HealthInfo | null = null;
   let healthInterval: ReturnType<typeof setInterval>;
   let cacheJustUpdated = false;
-
   // Render/proxy cold-start state.
   // Keep showing a disabled spinner until the proxy health endpoint replies.
   let proxyStarting = true;
+  // Prevent stacking concurrent health checks during Render cold starts.
+  let healthInflight = false;
 
   // Custom stream dialog
   let showCustomStream = false;
@@ -62,14 +62,13 @@
   // Preload heavy components in the background after first paint
   onMount(async () => {
     loading = true;
-
     try {
       movies = await fetchPopularMovies();
     } catch (e) {
       console.error("Failed to fetch popular movies", e);
     }
-
     loading = false;
+
     searchInput?.focus();
 
     // Do not block the app on Render cold-start.
@@ -80,7 +79,6 @@
     import("./components/Watch.svelte").then(
       (m) => (WatchComponent = m.default),
     );
-
     import("./components/MoviePopup.svelte").then(
       (m) => (MoviePopupComponent = m.default),
     );
@@ -88,36 +86,33 @@
 
   const doSearch = debounce(async () => {
     loading = true;
-
     try {
       movies = query ? await searchMovies(query) : await fetchPopularMovies();
     } catch (e) {
       console.error("Search failed", e);
       movies = [];
     }
-
     loading = false;
   }, 300);
 
-  $: if (query) doSearch();
-  else doSearch();
+  // Re-run search whenever the query changes (including being cleared).
+  $: query, doSearch();
 
   $: sortedMovies = [...movies].sort((a, b) => {
     if (sortBy === "rating") {
       return (b.vote_average ?? 0) - (a.vote_average ?? 0);
     }
-
     if (sortBy === "date") {
       return (b.release_date ?? "").localeCompare(a.release_date ?? "");
     }
-
     return (a.title ?? "").localeCompare(b.title ?? "");
   });
 
   async function refreshHealth() {
+    if (healthInflight) return;
+    healthInflight = true;
     try {
       const newHealth = await fetchHealth();
-
       if (
         healthInfo &&
         newHealth.cache.utilization_percent !==
@@ -126,12 +121,14 @@
         cacheJustUpdated = true;
         setTimeout(() => (cacheJustUpdated = false), 1500);
       }
-
       healthInfo = newHealth;
       proxyStarting = false;
     } catch {
-      // If Render is still waking up, keep the disabled spinner visible.
-      if (!healthInfo) proxyStarting = true;
+      // If Render is still waking up — or the proxy has died mid-session —
+      // surface the spinner again.
+      proxyStarting = true;
+    } finally {
+      healthInflight = false;
     }
   }
 
@@ -174,7 +171,6 @@
       if (!details.imdb_id) throw new Error("Missing imdb_id");
 
       progressMessage = "Finding best stream...";
-
       const result = await fetchMovieStreamUrl({
         title: details.title,
         year: details.release_date?.slice(0, 4) ?? "",
@@ -183,29 +179,24 @@
       });
 
       progressMessage = "Proxying stream...";
-
       const bestSource =
         result.sources.find((s) => s.quality === "1080p") ?? result.sources[0];
-
       if (!bestSource) throw new Error("No stream found");
 
       watchStreamUrl = createProxyUrl(bestSource.url);
-
       watchSources = result.sources.map((s) => ({
         quality: s.quality,
         url: createProxyUrl(s.url),
       }));
-
-      watchSubtitles = result.subtitles.map((sub) => ({
-        ...sub,
-        url: createProxyUrl(sub.url),
-      }));
-
-      watchSubtitles = dedupeSubtitles(watchSubtitles);
+      watchSubtitles = dedupeSubtitles(
+        result.subtitles.map((sub) => ({
+          ...sub,
+          url: createProxyUrl(sub.url),
+        })),
+      );
       watchMovie = details;
 
       progressMessage = "Loading player...";
-
       await new Promise((r) => setTimeout(r, 400));
       view = "watch";
     } catch (e) {
@@ -219,7 +210,7 @@
 
   async function handleCustomStream() {
     const url = customStreamUrl.trim();
-
+    const origin = customStreamOrigin.trim() || "https://cineby.sc";
     if (!url || !url.endsWith(".m3u8")) {
       alert("Invalid .m3u8 URL");
       return;
@@ -234,10 +225,9 @@
     }
 
     try {
-      watchStreamUrl = createProxyUrl(url);
+      watchStreamUrl = createProxyUrl(url, origin);
       watchSources = [{ quality: "Custom", url: watchStreamUrl }];
       watchSubtitles = [];
-
       watchMovie = {
         id: 0,
         title: "Custom Stream",
@@ -247,9 +237,7 @@
         vote_average: 0,
         overview: "",
       };
-
       showCustomStream = false;
-
       await new Promise((r) => setTimeout(r, 400));
       view = "watch";
     } catch (e) {
@@ -265,12 +253,9 @@
     subs: { lang: string; language: string; url: string }[],
   ) {
     const seen = new Set<string>();
-
     return subs.filter((sub) => {
       const key = sub.language.toLowerCase();
-
       if (seen.has(key)) return false;
-
       seen.add(key);
       return true;
     });
@@ -300,7 +285,7 @@
 
 {#if view === "home"}
   <main class="wrap">
-    <Header bind:query bind:searchInput on:search={() => doSearch()} />
+    <Header bind:query bind:searchInput onSearch={() => doSearch()} />
 
     <div class="toolbar">
       <button
@@ -423,22 +408,18 @@
     align-items: center;
     gap: 6px;
   }
-
   .join-room-btn:hover {
     background: rgba(255, 255, 255, 0.2);
   }
-
   .join-icon {
     width: 18px;
     height: 18px;
   }
-
   .wrap {
     max-width: 1200px;
     margin: 0 auto;
     padding: 32px 20px;
   }
-
   .toolbar {
     display: flex;
     align-items: center;
@@ -446,7 +427,6 @@
     margin-bottom: 24px;
     flex-wrap: wrap;
   }
-
   .custom-stream-btn {
     background: var(--color-accent-blue);
     color: #fff;
@@ -461,21 +441,17 @@
     align-items: center;
     gap: 6px;
   }
-
   .custom-stream-btn:hover {
     background: #0070e9;
   }
-
   .plus-icon {
     width: 18px;
     height: 18px;
   }
-
   .cache-inline {
     display: flex;
     align-items: center;
   }
-
   .loading-overlay {
     position: fixed;
     inset: 0;
@@ -486,7 +462,6 @@
     background: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(12px);
   }
-
   .loading-card {
     background: var(--color-bg-surface);
     border-radius: 16px;
@@ -498,14 +473,12 @@
     box-shadow: var(--shadow-elevated);
     min-width: 280px;
   }
-
   .progress-text {
     font-size: 15px;
     color: var(--color-text-secondary);
     font-weight: 500;
     margin: 0;
   }
-
   .progress-bar {
     width: 100%;
     height: 4px;
@@ -513,7 +486,6 @@
     border-radius: 2px;
     overflow: hidden;
   }
-
   .progress-fill {
     height: 100%;
     width: 60%;
@@ -521,27 +493,22 @@
     border-radius: 2px;
     animation: progress-indeterminate 1.4s ease-in-out infinite;
   }
-
   @keyframes progress-indeterminate {
     0% {
       transform: translateX(-100%);
     }
-
     50% {
       transform: translateX(0%);
     }
-
     100% {
       transform: translateX(100%);
     }
   }
-
   @media (max-width: 768px) {
     .wrap {
       padding: 24px 16px;
     }
   }
-
   @media (max-width: 480px) {
     .wrap {
       padding: 16px 12px;

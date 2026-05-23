@@ -16,7 +16,6 @@
 
   // ---------- DOM / player ----------
   let video: HTMLVideoElement;
-
   // Hls is loaded lazily — typed loosely so we don't import the module at build time
   let hls: any | null = null;
   let HlsClass: any = null;
@@ -29,9 +28,7 @@
   let showMore = false;
   let showCache = false;
   let subtitleOffset = 0;
-
   const originalCueTimes = new Map<number, { start: number; end: number }[]>();
-
   let ignoreTrackModeChange = false;
 
   // ---------- Sync state ----------
@@ -40,7 +37,6 @@
   let offset = 0;
   let syncCount = 0;
   let offsetSum = 0;
-
   const OFFSET_SAMPLES = 5;
 
   let playbackTimer: ReturnType<typeof setTimeout> | null = null;
@@ -50,32 +46,53 @@
   let positionReportTimer: ReturnType<typeof setInterval> | null = null;
 
   let masterPlaybackState: {
-    action: "play" | "pause" | "seek";
+    action: "play" | "pause";
     position: number;
     serverTimestamp: number;
   } | null = null;
-
   let videoReady = false;
   let pendingAction: { action: string; position: number } | null = null;
 
   let buffering = false;
   let reportedBuffering = false;
   let manualPlaybackRate = 1.0;
-
   let waiters: string[] = [];
 
   $: waitlocked = waiters.length > 0;
   $: othersWaiting = waiters.filter((w) => w !== username);
 
   let suppressEvents = 0;
-
   const suppress = (fn: () => void) => {
     suppressEvents++;
-
     try {
       fn();
     } finally {
       setTimeout(() => suppressEvents--, 80);
+    }
+  };
+
+  /**
+   * Run an action that will produce a "seeked" event, and keep
+   * event-suppression engaged until that event actually fires (capped at
+   * 1.5 s as a safety net). Avoids the feedback loop where a slow seek
+   * fires after the fixed-80ms suppression window has expired and gets
+   * echoed back to the server.
+   */
+  const suppressSeek = (fn: () => void) => {
+    suppressEvents++;
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      video.removeEventListener("seeked", release);
+      suppressEvents--;
+    };
+    video.addEventListener("seeked", release, { once: true });
+    setTimeout(release, 1500);
+    try {
+      fn();
+    } catch {
+      release();
     }
   };
 
@@ -87,7 +104,6 @@
     selectedQuality === -1
       ? "Auto"
       : (sources[selectedQuality]?.quality ?? "Auto");
-
   $: subtitleLabel =
     selectedSubtitle === -1
       ? "Off"
@@ -97,22 +113,18 @@
     if (waitlocked && othersWaiting.length > 0) {
       return `⏸ Waiting for ${othersWaiting.join(", ")}…`;
     }
-
     if (reportedBuffering) return `⏳ Buffering…`;
-
     return syncStatusText;
   })();
 
   // ===================================================================
-  //                         CAPTIONS
+  // CAPTIONS
   // ===================================================================
 
   function captureCueTimes(index: number, track: TextTrack) {
     if (originalCueTimes.has(index)) return;
-
     const cues = Array.from(track.cues || []);
     if (!cues.length) return;
-
     originalCueTimes.set(
       index,
       cues.map((c) => ({ start: c.startTime, end: c.endTime })),
@@ -121,12 +133,9 @@
 
   function onTrackModeChange() {
     if (ignoreTrackModeChange) return;
-
     const tracks = Array.from(video.textTracks);
     const activeIdx = tracks.findIndex((t) => t.mode === "showing");
-
     if (activeIdx !== selectedSubtitle) selectedSubtitle = activeIdx;
-
     showSubtitleMenu = false;
   }
 
@@ -134,7 +143,29 @@
     selectedQuality = index;
     showQualityMenu = false;
 
-    if (hls) hls.currentLevel = index;
+    if (index === -1) {
+      // "Auto" — let hls.js pick within the current playlist.
+      if (hls) hls.currentLevel = -1;
+      return;
+    }
+
+    // Each entry in `sources` is a *separate* m3u8 URL (often different
+    // CDN/quality) — not a level inside the currently loaded playlist.
+    // Switching requires reloading the source.
+    const url = sources[index]?.url;
+    if (!url || url === streamUrl) return;
+
+    const resumeAt = video.currentTime;
+    const wasPlaying = !video.paused;
+    streamUrl = url;
+    loadStream(url).then(() => {
+      const resume = () => {
+        video.currentTime = resumeAt;
+        if (wasPlaying) video.play().catch(() => {});
+        video.removeEventListener("loadedmetadata", resume);
+      };
+      video.addEventListener("loadedmetadata", resume);
+    });
   }
 
   function setSubtitle(index: number) {
@@ -143,32 +174,24 @@
     showSubtitleMenu = false;
 
     const tracks = video.textTracks;
-
     for (let i = 0; i < tracks.length; i++) {
       tracks[i].mode = i === index ? "showing" : "disabled";
     }
 
     if (index >= 0) captureCueTimes(index, tracks[index]);
-
     applySubtitleOffset(subtitleOffset, index);
-
     setTimeout(() => (ignoreTrackModeChange = false), 0);
   }
 
   function applySubtitleOffset(delta: number, trackIndex = selectedSubtitle) {
     const tracks = video.textTracks;
-
     if (!tracks || trackIndex < 0 || trackIndex >= tracks.length) return;
-
     const track = tracks[trackIndex];
     const original = originalCueTimes.get(trackIndex);
-
     if (!original || !track.cues) return;
-
     for (let i = 0; i < track.cues.length; i++) {
       const cue = track.cues[i];
       const orig = original[i];
-
       if (orig) {
         cue.startTime = orig.start + delta;
         cue.endTime = orig.end + delta;
@@ -180,7 +203,6 @@
     subtitleOffset += d;
     applySubtitleOffset(subtitleOffset);
   };
-
   const resetSubtitleOffset = () => {
     subtitleOffset = 0;
     applySubtitleOffset(0);
@@ -189,17 +211,15 @@
   const handleBack = () => onback();
 
   // ===================================================================
-  //                  LOCAL VIDEO -> WS
+  // LOCAL VIDEO -> WS
   // ===================================================================
 
   function onPlay() {
     if (suppressEvents) return;
-
     if (waitlocked) {
       suppress(() => video.pause());
       return;
     }
-
     sendPlaybackAction("play");
   }
 
@@ -215,31 +235,25 @@
 
   function sendPlaybackAction(action: string, position?: number) {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-
     const pos = typeof position === "number" ? position : video.currentTime;
-
     ws.send(JSON.stringify({ type: "playback", action, position: pos }));
   }
 
   // ===================================================================
-  //                  BUFFERING REPORTING
+  // BUFFERING REPORTING
   // ===================================================================
 
   function onWaiting() {
     buffering = true;
-
     if (bufferGraceTimer) clearTimeout(bufferGraceTimer);
-
     bufferGraceTimer = setTimeout(() => {
       bufferGraceTimer = null;
-
       if (
         buffering &&
         !reportedBuffering &&
         ws?.readyState === WebSocket.OPEN
       ) {
         reportedBuffering = true;
-
         ws.send(
           JSON.stringify({
             type: "buffer_start",
@@ -252,15 +266,12 @@
 
   function onPlaying() {
     buffering = false;
-
     if (bufferGraceTimer) {
       clearTimeout(bufferGraceTimer);
       bufferGraceTimer = null;
     }
-
     if (reportedBuffering && ws?.readyState === WebSocket.OPEN) {
       reportedBuffering = false;
-
       ws.send(
         JSON.stringify({
           type: "buffer_end",
@@ -272,15 +283,20 @@
 
   function onCanPlay() {
     videoReady = true;
-
     if (pendingAction) {
-      applyImmediately(pendingAction.action, pendingAction.position);
+      // Compensate for the time spent waiting for the media to be ready,
+      // otherwise a buffered-up play would start from the original
+      // position and rely entirely on drift correction to catch up.
+      let lateMs = 0;
+      if (masterPlaybackState) {
+        const serverNow = performance.now() + offset;
+        lateMs = Math.max(0, serverNow - masterPlaybackState.serverTimestamp);
+      }
+      applyImmediately(pendingAction.action, pendingAction.position, lateMs);
       pendingAction = null;
     }
-
     if (reportedBuffering && ws?.readyState === WebSocket.OPEN) {
       reportedBuffering = false;
-
       ws.send(
         JSON.stringify({
           type: "buffer_end",
@@ -291,12 +307,11 @@
   }
 
   // ===================================================================
-  //                            SYNC ENGINE
+  // SYNC ENGINE
   // ===================================================================
 
   function connectSync(roomId: string, name: string) {
     disconnectSync();
-
     username = name;
     offset = 0;
     syncCount = 0;
@@ -312,7 +327,6 @@
       socket.send(
         JSON.stringify({ type: "join", name, clientId: crypto.randomUUID() }),
       );
-
       for (let i = 0; i < OFFSET_SAMPLES; i++) {
         setTimeout(() => {
           if (socket.readyState === WebSocket.OPEN) {
@@ -325,24 +339,20 @@
           }
         }, i * 200);
       }
-
       if (streamUrl) {
         socket.send(JSON.stringify({ type: "stream", url: streamUrl }));
       }
-
       startDriftCorrection();
       startPositionReporter();
     };
 
     socket.onmessage = (e) => {
       let data: any;
-
       try {
         data = JSON.parse(e.data);
       } catch {
         return;
       }
-
       if (!data?.type) return;
 
       switch (data.type) {
@@ -353,16 +363,13 @@
           ) {
             break;
           }
-
           const localPerfNow = performance.now();
           const roundTrip = localPerfNow - data.clientTs;
           const estimatedServerNow = data.serverTs + roundTrip / 2;
           const sample = estimatedServerNow - localPerfNow;
-
           offsetSum += sample;
           syncCount++;
           offset = offsetSum / syncCount;
-
           syncStatusText = `Offset: ${offset.toFixed(1)} ms | Synced ${syncCount} samples`;
           break;
         }
@@ -375,25 +382,21 @@
           ) {
             break;
           }
-
           scheduleAction(data.action, data.position, data.timestamp);
           break;
         }
 
         case "waitlock": {
           waiters = Array.isArray(data.waiters) ? data.waiters : [];
-
           if (waitlocked) {
             if (playbackTimer) {
               clearTimeout(playbackTimer);
               playbackTimer = null;
             }
-
             if (videoReady && !video.paused) {
               suppress(() => video.pause());
             }
           }
-
           break;
         }
 
@@ -406,7 +409,6 @@
             streamUrl = data.url;
             loadStream(data.url);
           }
-
           break;
         }
       }
@@ -418,7 +420,6 @@
 
     socket.onclose = () => {
       if (ws === socket) ws = null;
-
       syncStatusText = "Disconnected";
       clearTimers();
       waiters = [];
@@ -433,20 +434,15 @@
 
   function disconnectSync() {
     clearTimers();
-
     if (ws) {
       try {
         ws.close();
       } catch {}
-
       ws = null;
     }
-
     masterPlaybackState = null;
     manualPlaybackRate = 1.0;
-
     if (video) video.playbackRate = 1.0;
-
     waiters = [];
     reportedBuffering = false;
   }
@@ -456,22 +452,18 @@
       clearTimeout(playbackTimer);
       playbackTimer = null;
     }
-
     if (heartbeatTimer) {
       clearInterval(heartbeatTimer);
       heartbeatTimer = null;
     }
-
     if (driftTimer) {
       clearInterval(driftTimer);
       driftTimer = null;
     }
-
     if (bufferGraceTimer) {
       clearTimeout(bufferGraceTimer);
       bufferGraceTimer = null;
     }
-
     if (positionReportTimer) {
       clearInterval(positionReportTimer);
       positionReportTimer = null;
@@ -489,6 +481,9 @@
       hls.destroy();
       hls = null;
     }
+    // The old media is being replaced. Until the new media reports
+    // "canplay", any incoming playback action must be deferred.
+    videoReady = false;
 
     // Lazy-load hls.js only when actually needed
     if (!HlsClass) {
@@ -510,7 +505,23 @@
     position: number,
     serverTimestamp: number,
   ) {
-    masterPlaybackState = { action: action as any, position, serverTimestamp };
+    // "seek" is a transient correction — don't let it overwrite the
+    // authoritative play/pause state used by drift correction. Otherwise
+    // drift correction silently stops working after every release-seek
+    // the server emits during a waitlock-release with !preLockWasPlaying.
+    if (action === "play" || action === "pause") {
+      masterPlaybackState = {
+        action,
+        position,
+        serverTimestamp,
+      };
+    } else if (action === "seek" && masterPlaybackState) {
+      masterPlaybackState = {
+        ...masterPlaybackState,
+        position,
+        serverTimestamp,
+      };
+    }
 
     const targetLocal = serverTimestamp - offset;
     const delay = targetLocal - performance.now();
@@ -527,7 +538,6 @@
         () => applyImmediately(action, position, 0),
         delay,
       );
-
       syncStatusText = `Offset: ${offset.toFixed(1)} ms | Scheduled ${action} in ${(delay / 1000).toFixed(2)}s`;
     }
   }
@@ -537,24 +547,28 @@
       pendingAction = { action, position };
       return;
     }
-
-    suppress(() => {
-      if (action === "play") {
+    if (action === "play") {
+      suppressSeek(() => {
         video.currentTime = position + lateByMs / 1000;
+      });
+      suppress(() => {
         video.play().catch(() => {});
         video.playbackRate = manualPlaybackRate;
-      } else if (action === "pause") {
+      });
+    } else if (action === "pause") {
+      suppress(() => {
         video.pause();
         video.playbackRate = manualPlaybackRate;
-      } else if (action === "seek") {
+      });
+    } else if (action === "seek") {
+      suppressSeek(() => {
         video.currentTime = position + lateByMs / 1000;
-      }
-    });
+      });
+    }
   }
 
   function startDriftCorrection() {
     if (driftTimer) clearInterval(driftTimer);
-
     driftTimer = setInterval(() => {
       if (
         !videoReady ||
@@ -568,22 +582,18 @@
         if (video) video.playbackRate = manualPlaybackRate;
         return;
       }
-
       if (masterPlaybackState.action !== "play") return;
 
       const serverNow = performance.now() + offset;
-
       const expected =
         masterPlaybackState.position +
         (serverNow - masterPlaybackState.serverTimestamp) / 1000;
-
       const drift = expected - video.currentTime;
 
       if (Math.abs(drift) > 1.0) {
-        suppress(() => {
+        suppressSeek(() => {
           video.currentTime = expected;
         });
-
         video.playbackRate = manualPlaybackRate;
         syncStatusText = `Drift large (${(drift * 1000).toFixed(0)}ms)! Hard-syncing…`;
       } else if (drift > 0.03) {
@@ -601,10 +611,11 @@
 
   function startPositionReporter() {
     if (positionReportTimer) clearInterval(positionReportTimer);
-
     positionReportTimer = setInterval(() => {
+      // Only useful to the server while a waitlock is engaged
+      // (it picks the slowest position on release). Skip otherwise.
+      if (!waitlocked) return;
       if (!videoReady || !ws || ws.readyState !== WebSocket.OPEN) return;
-
       ws.send(
         JSON.stringify({
           type: "position_report",
@@ -615,21 +626,18 @@
   }
 
   // ===================================================================
-  //                           LIFECYCLE
+  // LIFECYCLE
   // ===================================================================
 
   onMount(() => {
     subtitles.forEach((sub, i) => {
       const t = document.createElement("track");
-
       t.kind = "subtitles";
       t.label = sub.language;
       t.srclang = sub.lang;
       t.src = sub.url;
       t.id = `sub-${i}`;
-
       video.appendChild(t);
-
       t.addEventListener("load", () => {
         captureCueTimes(i, t.track);
         t.track.addEventListener("modechange", onTrackModeChange);
@@ -642,12 +650,9 @@
     video.addEventListener("waiting", onWaiting);
     video.addEventListener("playing", onPlaying);
     video.addEventListener("stalled", onWaiting);
-
     video.addEventListener("ratechange", () => {
       if (suppressEvents) return;
-
       const r = video.playbackRate;
-
       if (r < 0.97 || r > 1.03) manualPlaybackRate = r;
     });
 
@@ -786,7 +791,8 @@
     on:play={onPlay}
     on:pause={onPause}
     on:seeked={onSeeked}
-  ></video>
+  >
+  </video>
 </div>
 
 <style>
@@ -795,14 +801,12 @@
     margin: 0 auto;
     padding: 24px;
   }
-
   .top-bar {
     display: flex;
     align-items: center;
     gap: 12px;
     margin-bottom: 16px;
   }
-
   .back-btn {
     background: var(--color-accent-blue);
     color: #fff;
@@ -814,11 +818,9 @@
     cursor: pointer;
     transition: background 0.2s;
   }
-
   .back-btn:hover {
     background: #0070e9;
   }
-
   .movie-title {
     font-size: 22px;
     font-weight: 700;
@@ -829,7 +831,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-
   .more-btn {
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.15);
@@ -841,16 +842,13 @@
     align-items: center;
     transition: background 0.2s;
   }
-
   .more-btn:hover {
     background: rgba(255, 255, 255, 0.2);
   }
-
   .more-icon {
     width: 18px;
     height: 18px;
   }
-
   .primary-controls {
     display: flex;
     align-items: center;
@@ -858,13 +856,11 @@
     margin-bottom: 12px;
     flex-wrap: wrap;
   }
-
   .timing-controls {
     display: flex;
     align-items: center;
     gap: 4px;
   }
-
   .timing-controls button {
     background: rgba(255, 255, 255, 0.08);
     border: 1px solid rgba(255, 255, 255, 0.12);
@@ -876,12 +872,10 @@
     cursor: pointer;
     transition: background 0.2s;
   }
-
   .timing-controls button:hover {
     background: rgba(255, 255, 255, 0.18);
     color: #fff;
   }
-
   .offset-display {
     font-size: 12px;
     color: var(--color-accent-blue);
@@ -889,27 +883,22 @@
     min-width: 40px;
     text-align: center;
   }
-
   .reset-btn {
     color: var(--color-accent-pink) !important;
   }
-
   .sync-bar {
     display: flex;
     align-items: center;
     gap: 8px;
     margin-bottom: 8px;
   }
-
   .sync-status {
     font-size: 13px;
     color: #0f0;
   }
-
   .sync-status.waiting {
     color: #fc0;
   }
-
   .sync-btn {
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.15);
@@ -921,17 +910,14 @@
     cursor: pointer;
     transition: background 0.2s;
   }
-
   .sync-btn:hover {
     background: rgba(255, 255, 255, 0.2);
   }
-
   .more-menu {
     display: flex;
     gap: 8px;
     margin-bottom: 12px;
   }
-
   .control-btn {
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.15);
@@ -946,21 +932,17 @@
     gap: 6px;
     transition: background 0.2s;
   }
-
   .control-btn:hover:not(:disabled) {
     background: rgba(255, 255, 255, 0.2);
   }
-
   .control-btn:disabled {
     cursor: not-allowed;
     opacity: 0.65;
     color: var(--color-text-secondary);
   }
-
   .cache-loading-btn {
     pointer-events: none;
   }
-
   .spinner {
     width: 13px;
     height: 13px;
@@ -969,18 +951,15 @@
     border-top-color: var(--color-accent-blue);
     animation: spin 0.8s linear infinite;
   }
-
   .cache-section {
     margin-bottom: 12px;
   }
-
   .player {
     width: 100%;
     border-radius: 16px;
     background: #000;
     box-shadow: var(--shadow-elevated);
   }
-
   :global(.dropdown-menu button) {
     background: none;
     border: none;
@@ -992,31 +971,25 @@
     text-align: left;
     width: 100%;
   }
-
   :global(.dropdown-menu button:hover) {
     background: rgba(255, 255, 255, 0.1);
   }
-
   :global(.dropdown-menu button.active) {
     color: var(--color-accent-blue);
     font-weight: 600;
   }
-
   @keyframes spin {
     to {
       transform: rotate(360deg);
     }
   }
-
   @media (max-width: 768px) {
     .watch-container {
       padding: 16px;
     }
-
     .movie-title {
       font-size: 18px;
     }
-
     .primary-controls {
       gap: 6px;
     }
