@@ -17,9 +17,25 @@
   // ---------- DOM / player ----------
   let video: HTMLVideoElement;
 
-  // Hls is loaded lazily — typed loosely so we don't import the module at build time
   let hls: any | null = null;
-  let HlsClass: any = null;
+  let HlsClass: any | null = null;
+
+  // ---------- Subtitle tracks ----------
+  // Direct references to <track> elements we create in onMount.
+  // These survive quality switches — hls.js never touches them because
+  // we use renderTextTracksNatively: false.
+  let subtitleTracks: HTMLTrackElement[] = [];
+
+  // Original cue times keyed by track element (stable across quality switches).
+  const originalCueTimes = new Map<
+    HTMLTrackElement,
+    { start: number; end: number }[]
+  >();
+
+  // Saved subtitle state before a quality switch, so we can restore it.
+  let savedSubtitleLang = "";
+  let savedSubtitleOffset = 0;
+  let awaitingSubtitleRestore = false;
 
   // ---------- UI state ----------
   let selectedQuality = -1;
@@ -29,7 +45,6 @@
   let showMore = false;
   let showCache = false;
   let subtitleOffset = 0;
-  const originalCueTimes = new Map<number, { start: number; end: number }[]>();
   let ignoreTrackModeChange = false;
 
   // ---------- Sync state ----------
@@ -60,6 +75,7 @@
   $: othersWaiting = waiters.filter((w) => w !== username);
 
   let suppressEvents = 0;
+
   const suppress = (fn: () => void) => {
     suppressEvents++;
     try {
@@ -69,13 +85,6 @@
     }
   };
 
-  /**
-   * Run an action that will produce a "seeked" event, and keep
-   * event-suppression engaged until that event actually fires (capped at
-   * 1.5 s as a safety net). Avoids the feedback loop where a slow seek
-   * fires after the fixed-80ms suppression window has expired and gets
-   * echoed back to the server.
-   */
   const suppressSeek = (fn: () => void) => {
     suppressEvents++;
     let released = false;
@@ -119,12 +128,16 @@
   // CAPTIONS
   // ===================================================================
 
-  function captureCueTimes(index: number, track: TextTrack) {
-    if (originalCueTimes.has(index)) return;
-    const cues = Array.from(track.cues || []);
+  /**
+   * Store original cue timestamps for a track so offsets are always
+   * applied relative to the unshifted baseline, never accumulated.
+   */
+  function captureCueTimes(track: HTMLTrackElement) {
+    if (originalCueTimes.has(track)) return;
+    const cues = Array.from(track.track.cues || []);
     if (!cues.length) return;
     originalCueTimes.set(
-      index,
+      track,
       cues.map((c) => ({ start: c.startTime, end: c.endTime })),
     );
   }
@@ -132,58 +145,29 @@
   function onTrackModeChange() {
     if (ignoreTrackModeChange) return;
     const tracks = Array.from(video.textTracks);
-    const activeIdx = tracks.findIndex((t) => t.mode === "showing");
-    if (activeIdx !== selectedSubtitle) selectedSubtitle = activeIdx;
+    const activeTrack = tracks.find((t) => t.mode === "showing");
+
+    if (activeTrack) {
+      // Find the exact matching object instead of relying on array index
+      const idx = subtitleTracks.findIndex((t) => t.track === activeTrack);
+      selectedSubtitle = idx; // Will gracefully set to -1 if an embedded HLS track is active
+    } else {
+      selectedSubtitle = -1;
+    }
     showSubtitleMenu = false;
   }
 
-  function setQuality(index: number) {
-    selectedQuality = index;
-    showQualityMenu = false;
-    if (index === -1) {
-      // "Auto" — let hls.js pick within the current playlist.
-      if (hls) hls.currentLevel = -1;
-      return;
-    }
-    // Each entry in `sources` is a *separate* m3u8 URL (often different
-    // CDN/quality) — not a level inside the currently loaded playlist.
-    // Switching requires reloading the source.
-    const url = sources[index]?.url;
-    if (!url || url === streamUrl) return;
-    const resumeAt = video.currentTime;
-    const wasPlaying = !video.paused;
-    streamUrl = url;
-    loadStream(url).then(() => {
-      const resume = () => {
-        video.currentTime = resumeAt;
-        if (wasPlaying) video.play().catch(() => {});
-        video.removeEventListener("loadedmetadata", resume);
-      };
-      video.addEventListener("loadedmetadata", resume);
-    });
-  }
-
-  function setSubtitle(index: number) {
-    ignoreTrackModeChange = true;
-    selectedSubtitle = index;
-    showSubtitleMenu = false;
-    const tracks = video.textTracks;
-    for (let i = 0; i < tracks.length; i++) {
-      tracks[i].mode = i === index ? "showing" : "disabled";
-    }
-    if (index >= 0) captureCueTimes(index, tracks[index]);
-    applySubtitleOffset(subtitleOffset, index);
-    setTimeout(() => (ignoreTrackModeChange = false), 0);
-  }
-
-  function applySubtitleOffset(delta: number, trackIndex = selectedSubtitle) {
-    const tracks = video.textTracks;
-    if (!tracks || trackIndex < 0 || trackIndex >= tracks.length) return;
-    const track = tracks[trackIndex];
-    const original = originalCueTimes.get(trackIndex);
-    if (!original || !track.cues) return;
-    for (let i = 0; i < track.cues.length; i++) {
-      const cue = track.cues[i];
+  /**
+   * Apply a time offset to all cues in a track.
+   * Uses stored original times so offsets are always relative to baseline.
+   */
+  function applySubtitleOffset(delta: number, track: HTMLTrackElement) {
+    if (!track) return;
+    const videoTrack = track.track;
+    const original = originalCueTimes.get(track);
+    if (!original || !videoTrack.cues) return;
+    for (let i = 0; i < videoTrack.cues.length; i++) {
+      const cue = videoTrack.cues[i];
       const orig = original[i];
       if (orig) {
         cue.startTime = orig.start + delta;
@@ -191,15 +175,40 @@
       }
     }
   }
+  function setSubtitle(index: number) {
+    ignoreTrackModeChange = true;
+    selectedSubtitle = index;
+    showSubtitleMenu = false;
+
+    // 1. Force ALL tracks (ours and HLS-embedded ones) to disabled first
+    for (let i = 0; i < video.textTracks.length; i++) {
+      video.textTracks[i].mode = "disabled";
+    }
+
+    // 2. Enable only the selected external track
+    if (index >= 0 && index < subtitleTracks.length) {
+      const targetTrack = subtitleTracks[index];
+      targetTrack.track.mode = "showing";
+
+      captureCueTimes(targetTrack);
+      applySubtitleOffset(subtitleOffset, targetTrack);
+    }
+
+    setTimeout(() => (ignoreTrackModeChange = false), 0);
+  }
 
   const adjustSubtitleOffset = (d: number) => {
     subtitleOffset += d;
-    applySubtitleOffset(subtitleOffset);
+    if (selectedSubtitle >= 0 && selectedSubtitle < subtitleTracks.length) {
+      applySubtitleOffset(subtitleOffset, subtitleTracks[selectedSubtitle]);
+    }
   };
 
   const resetSubtitleOffset = () => {
     subtitleOffset = 0;
-    applySubtitleOffset(0);
+    if (selectedSubtitle >= 0 && selectedSubtitle < subtitleTracks.length) {
+      applySubtitleOffset(0, subtitleTracks[selectedSubtitle]);
+    }
   };
 
   const handleBack = () => onback();
@@ -278,9 +287,6 @@
   function onCanPlay() {
     videoReady = true;
     if (pendingAction) {
-      // Compensate for the time spent waiting for the media to be ready,
-      // otherwise a buffered-up play would start from the original
-      // position and rely entirely on drift correction to catch up.
       let lateMs = 0;
       if (masterPlaybackState) {
         const serverNow = performance.now() + offset;
@@ -473,26 +479,110 @@
     }
   }
 
+  /**
+   * Find the external <track> element whose srclang matches the saved language
+   * and activate it, restoring the subtitle offset too.
+   */
+  function restoreSubtitleByLang(lang: string, offsetDelta: number) {
+    const idx = subtitles.findIndex((s) => s.lang === lang);
+    if (idx !== -1) {
+      subtitleOffset = offsetDelta;
+      setSubtitle(idx);
+    }
+  }
   async function loadStream(url: string) {
     if (hls) {
       hls.destroy();
       hls = null;
     }
-    // The old media is being replaced. Until the new media reports
-    // "canplay", any incoming playback action must be deferred.
+
     videoReady = false;
-    // Lazy-load hls.js only when actually needed
+
+    // 1. Destroy old tracks to prevent browser zombie state
+    subtitleTracks.forEach((t) => {
+      if (t && t.parentNode) t.parentNode.removeChild(t);
+    });
+    subtitleTracks = [];
+    originalCueTimes.clear();
+
+    // 2. Rebuild fresh tracks for the new video source
+    subtitles.forEach((sub, i) => {
+      const t = document.createElement("track");
+      t.kind = "subtitles";
+      t.label = sub.language;
+      t.srclang = sub.lang;
+      t.src = sub.url;
+      t.id = `sub-${i}`;
+      video.appendChild(t);
+      subtitleTracks[i] = t;
+
+      t.addEventListener("load", () => {
+        captureCueTimes(t);
+        t.track.addEventListener("modechange", onTrackModeChange);
+        // Apply offset seamlessly once the new VTT loads
+        if (selectedSubtitle === i && subtitleOffset !== 0) {
+          applySubtitleOffset(subtitleOffset, t);
+        }
+      });
+    });
+
     if (!HlsClass) {
       const mod = await import("hls.js");
       HlsClass = mod.default;
     }
+
     if (HlsClass.isSupported()) {
-      hls = new HlsClass({ capLevelToPlayerSize: false, autoStartLoad: true });
+      hls = new HlsClass({
+        capLevelToPlayerSize: false,
+        autoStartLoad: true,
+        renderTextTracksNatively: false,
+      });
+
+      hls.on(HlsClass.Events.MANIFEST_PARSED, () => {});
       hls.loadSource(url);
       hls.attachMedia(video);
     } else {
       video.src = url;
     }
+  }
+  function setQuality(index: number) {
+    selectedQuality = index;
+    showQualityMenu = false;
+    if (index === -1) {
+      if (hls) hls.currentLevel = -1;
+      return;
+    }
+
+    const url = sources[index]?.url;
+    if (!url || url === streamUrl) return;
+
+    const resumeAt = video.currentTime;
+    const wasPlaying = !video.paused;
+
+    if (selectedSubtitle >= 0 && selectedSubtitle < subtitles.length) {
+      savedSubtitleLang = subtitles[selectedSubtitle].lang;
+      savedSubtitleOffset = subtitleOffset;
+      awaitingSubtitleRestore = true;
+    } else {
+      savedSubtitleLang = "";
+      awaitingSubtitleRestore = false;
+    }
+
+    streamUrl = url;
+    loadStream(url).then(() => {
+      const resume = () => {
+        video.currentTime = resumeAt;
+        if (wasPlaying) video.play().catch(() => {});
+        video.removeEventListener("loadedmetadata", resume);
+
+        // RESTORE HERE: The browser is done resetting the video element
+        if (awaitingSubtitleRestore && savedSubtitleLang) {
+          awaitingSubtitleRestore = false;
+          restoreSubtitleByLang(savedSubtitleLang, savedSubtitleOffset);
+        }
+      };
+      video.addEventListener("loadedmetadata", resume, { once: true });
+    });
   }
 
   function scheduleAction(
@@ -500,10 +590,6 @@
     position: number,
     serverTimestamp: number,
   ) {
-    // "seek" is a transient correction — don't let it overwrite the
-    // authoritative play/pause state used by drift correction. Otherwise
-    // drift correction silently stops working after every release-seek
-    // the server emits during a waitlock-release with !preLockWasPlaying.
     if (action === "play" || action === "pause") {
       masterPlaybackState = {
         action,
@@ -578,10 +664,6 @@
         return;
       }
 
-      // If paused but should be playing, retry playback.
-      // Without this, a rejected video.play() (autoplay policy, transient
-      // error) leaves the client permanently stuck paused while the server
-      // thinks everyone is playing — drift correction never runs.
       if (video.paused) {
         if (masterPlaybackState.action === "play") {
           suppressSeek(() => {
@@ -625,8 +707,6 @@
   function startPositionReporter() {
     if (positionReportTimer) clearInterval(positionReportTimer);
     positionReportTimer = setInterval(() => {
-      // Only useful to the server while a waitlock is engaged
-      // (it picks the slowest position on release). Skip otherwise.
       if (!waitlocked) return;
       if (!videoReady || !ws || ws.readyState !== WebSocket.OPEN) return;
       ws.send(
@@ -641,22 +721,8 @@
   // ===================================================================
   // LIFECYCLE
   // ===================================================================
-
   onMount(() => {
-    subtitles.forEach((sub, i) => {
-      const t = document.createElement("track");
-      t.kind = "subtitles";
-      t.label = sub.language;
-      t.srclang = sub.lang;
-      t.src = sub.url;
-      t.id = `sub-${i}`;
-      video.appendChild(t);
-      t.addEventListener("load", () => {
-        captureCueTimes(i, t.track!);
-        t.track!.addEventListener("modechange", onTrackModeChange);
-      });
-    });
-
+    // Track creation is now safely handled inside loadStream()
     loadStream(streamUrl);
 
     video.addEventListener("canplay", onCanPlay);
