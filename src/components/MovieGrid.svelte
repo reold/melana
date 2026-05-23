@@ -4,10 +4,9 @@
 
   export let movies: Movie[] = [];
   export let isLoading: boolean = false;
-  export let activeMovieId: number | null = null;
 
-  // Svelte 5 callbacks
-  export let onselect: (movie: Movie) => void = () => {};
+  // Callbacks
+  export let onselect: (movie: Movie, rect: DOMRect) => void = () => {};
   export let onplay: (movie: Movie) => void = () => {};
 </script>
 
@@ -20,7 +19,7 @@
     <div class="empty">NO MOVIES FOUND</div>
   {:else}
     {#each movies as movie (movie.id)}
-      <MovieCard {movie} {activeMovieId} {onselect} {onplay} />
+      <MovieCard {movie} {onselect} {onplay} />
     {/each}
   {/if}
 </section>

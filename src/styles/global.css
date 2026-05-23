@@ -64,3 +64,26 @@ body {
     transform: scale(1);
   }
 }
+
+.dropdown-menu button.active {
+  color: var(--color-accent-blue);
+  font-weight: 600;
+}
+.dropdown-menu button {
+  background: none;
+  border: none;
+  color: var(--color-text-primary);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+.dropdown-menu button:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+.dropdown-menu button.active {
+  color: var(--color-accent-blue);
+  font-weight: 600;
+}

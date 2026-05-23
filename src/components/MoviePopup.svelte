@@ -5,11 +5,14 @@
 
   export let movie: Movie;
   export let cast: CastMember[];
+  export let sourceRect: DOMRect;
   export let onclose: () => void = () => {};
+  export let onplay: (movie: Movie) => void = () => {};
 
   let showAllCast = false;
   let popup: HTMLDivElement;
   let overlay: HTMLDivElement;
+  let posterImg: HTMLImageElement;
 
   $: truncatedCast = showAllCast ? cast : cast.slice(0, 5);
   $: remainingCount = cast.length - 5;
@@ -26,6 +29,10 @@
     if (e.key === "Escape") close();
   }
 
+  function handlePlay() {
+    onplay(movie);
+  }
+
   $: backdrop = movie.backdrop_path
     ? `https://image.tmdb.org/t/p/w1280${movie.backdrop_path}`
     : null;
@@ -39,6 +46,34 @@
       { opacity: 0, duration: 0.3 },
       { opacity: 1, ease: "power2.out" },
     );
+
+    if (posterImg && sourceRect) {
+      const targetRect = posterImg.getBoundingClientRect();
+      const deltaX = sourceRect.left - targetRect.left;
+      const deltaY = sourceRect.top - targetRect.top;
+      const scaleX = sourceRect.width / targetRect.width;
+      const scaleY = sourceRect.height / targetRect.height;
+
+      gsap.fromTo(
+        posterImg,
+        {
+          x: deltaX,
+          y: deltaY,
+          scaleX,
+          scaleY,
+          transformOrigin: "top left",
+        },
+        {
+          x: 0,
+          y: 0,
+          scaleX: 1,
+          scaleY: 1,
+          duration: 0.4,
+          ease: "back.out(1.2)",
+        },
+      );
+    }
+
     gsap.fromTo(
       popup,
       { scale: 0.95, opacity: 0, duration: 0.3 },
@@ -100,7 +135,10 @@
       </div>
 
       <div class="info">
-        <h2 style="view-transition-name: movie-title">{movie.title}</h2>
+        <div class="title-row">
+          <h2 style="view-transition-name: movie-title">{movie.title}</h2>
+          <button class="btn-play" on:click={handlePlay}>▶ Play</button>
+        </div>
         {#if movie.release_date}
           <p class="release" style="view-transition-name: movie-date">
             {movie.release_date.slice(0, 4)}
@@ -255,11 +293,38 @@
     flex: 1;
   }
 
+  .title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 4px;
+  }
+
   h2 {
     font-size: 24px;
     font-weight: 700;
-    margin: 0 0 4px 0;
+    margin: 0;
     letter-spacing: -0.3px;
+    flex: 1;
+  }
+
+  .btn-play {
+    background: var(--color-accent-green);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 8px 18px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .btn-play:hover {
+    background: #30b94e;
   }
 
   .release {
@@ -370,6 +435,10 @@
     }
     h2 {
       font-size: 20px;
+    }
+    .btn-play {
+      padding: 6px 14px;
+      font-size: 14px;
     }
   }
 </style>

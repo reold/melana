@@ -4,23 +4,24 @@
 
   export let movie: Movie | null = null;
   export let isSkeleton: boolean = false;
-  export let activeMovieId: number | null = null;
 
-  // Svelte 5 callbacks
-  export let onselect: (movie: Movie) => void = () => {};
+  export let onselect: (movie: Movie, rect: DOMRect) => void = () => {};
   export let onplay: (movie: Movie) => void = () => {};
 
-  $: isActive = movie?.id != null && movie.id === activeMovieId;
+  let imgEl: HTMLImageElement | undefined;
 
   function handlePlay(e: Event) {
-    e.stopPropagation(); // prevent card click
+    e.stopPropagation();
     if (!movie) return;
     onplay(movie);
   }
 
   function handleCardClick() {
     if (!movie) return;
-    onselect(movie);
+    const rect = imgEl?.getBoundingClientRect();
+    if (rect) {
+      onselect(movie, rect);
+    }
   }
 </script>
 
@@ -36,9 +37,9 @@
     {#if !isSkeleton}
       {#if movie?.poster_path}
         <img
+          bind:this={imgEl}
           src="https://image.tmdb.org/t/p/w342{movie.poster_path}"
           alt={movie.title}
-          style:view-transition-name={isActive ? "movie-poster" : "none"}
         />
       {:else}
         <div class="thumb" aria-hidden="true">🎬</div>
@@ -47,23 +48,19 @@
       <div class="skeleton-art" aria-hidden="true"></div>
     {/if}
   </div>
+
   <div class="meta">
     {#if !isSkeleton}
-      <h3 style:view-transition-name={isActive ? "movie-title" : "none"}>
-        {movie?.title}
-      </h3>
-      <p
-        class="sub"
-        style:view-transition-name={isActive ? "movie-date" : "none"}
-      >
-        {movie?.release_date || "N/A"}
-      </p>
-      <div class="actions">
-        <Button variant="success" size="sm" onClick={handlePlay}>Play</Button>
-        <Button variant="secondary" size="sm" onClick={handleCardClick}
-          >Info</Button
-        >
-      </div>
+      <h3>{movie?.title}</h3>
+      <p class="sub">{movie?.release_date || "N/A"}</p>
+
+      <!-- Wide play button at the bottom -->
+      <button class="play-btn" on:click={handlePlay}>
+        <svg class="play-icon" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M8 5.14v14l11-7-11-7z" />
+        </svg>
+        Play
+      </button>
     {:else}
       <div
         class="skeleton-line"
@@ -73,10 +70,7 @@
       <p class="sub skeleton-line" style="width: 60%;" aria-hidden="true">
         &nbsp;
       </p>
-      <div class="actions" aria-hidden="true">
-        <button class="skeleton-btn" aria-label="Loading" disabled></button>
-        <button class="skeleton-btn" aria-label="Loading" disabled></button>
-      </div>
+      <div class="skeleton-btn" aria-hidden="true"></div>
     {/if}
   </div>
 </div>
@@ -141,15 +135,38 @@
   }
 
   .sub {
-    margin: 0 0 12px 0;
+    margin: 0 0 16px 0;
     color: var(--color-text-secondary);
     font-size: 13px;
     font-weight: 500;
   }
 
-  .actions {
+  /* Play button */
+  .play-btn {
+    background: var(--color-accent-green);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 0;
+    width: 100%;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
     display: flex;
-    gap: 8px;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: background 0.2s;
+    margin-top: auto;
+  }
+
+  .play-btn:hover {
+    background: #30b94e;
+  }
+
+  .play-icon {
+    width: 20px;
+    height: 20px;
   }
 
   /* Skeleton Loading */
@@ -172,13 +189,13 @@
   }
 
   .skeleton-btn {
-    flex: 1;
-    height: 36px;
+    height: 44px;
     background: linear-gradient(90deg, #2c2c2e 0%, #3a3a3c 50%, #2c2c2e 100%);
     background-size: 200% 100%;
     border: none;
     border-radius: 10px;
     animation: skeleton-shimmer 2s infinite;
+    margin-top: auto;
   }
 
   @keyframes skeleton-shimmer {
@@ -187,6 +204,12 @@
     }
     100% {
       background-position: -200% 0;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .art {
+      height: 220px;
     }
   }
 </style>

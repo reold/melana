@@ -1,3 +1,19 @@
+interface Source {
+  quality: string;
+  url: string;
+}
+
+interface Subtitle {
+  url: string;
+  lang: string;
+  language: string;
+}
+
+interface VideasyResult {
+  sources: Source[];
+  subtitles: Subtitle[];
+}
+
 const HEADERS = {
   Accept: "*/*",
   Origin: "https://cineby.sc",
@@ -6,29 +22,22 @@ const HEADERS = {
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
 };
 
-interface StreamResult {
-  sources: { url: string; quality: string }[];
-}
-
 export async function fetchMovieStreamUrl(movie: {
   title: string;
   year: string;
   tmdbId: number;
   imdbId: string;
-}): Promise<string> {
-  // Double‑encode title as required by videasy
+}): Promise<{ sources: Source[]; subtitles: Subtitle[] }> {
   const doubleEncodedTitle = encodeURIComponent(
     encodeURIComponent(movie.title),
   );
-  const server = "cdn"; // default server
+  const server = "cdn";
 
   const videasyUrl = `https://api.videasy.net/${server}/sources-with-title?title=${doubleEncodedTitle}&mediaType=movie&year=${movie.year}&tmdbId=${movie.tmdbId}&imdbId=${movie.imdbId}`;
 
-  // 1. Fetch encrypted text
   const encRes = await fetch(videasyUrl, { headers: HEADERS });
   const encText = await encRes.text();
 
-  // 2. Decrypt via enc‑dec.app
   const decRes = await fetch("https://enc-dec.app/api/dec-videasy", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -38,8 +47,8 @@ export async function fetchMovieStreamUrl(movie: {
   if (decData.status !== 200)
     throw new Error("Decryption failed: " + decData.error);
 
-  const sources: { url: string }[] = decData.result?.sources ?? decData.result;
-  const m3u8 = sources.find((s) => s.url.includes(".m3u8"))?.url;
-  if (!m3u8) throw new Error("No m3u8 stream found");
-  return m3u8;
+  return {
+    sources: decData.result?.sources ?? [],
+    subtitles: decData.result?.subtitles ?? [],
+  };
 }
