@@ -16,6 +16,7 @@
 
   // ---------- DOM / player ----------
   let video: HTMLVideoElement;
+
   // Hls is loaded lazily — typed loosely so we don't import the module at build time
   let hls: any | null = null;
   let HlsClass: any = null;
@@ -38,13 +39,11 @@
   let syncCount = 0;
   let offsetSum = 0;
   const OFFSET_SAMPLES = 5;
-
   let playbackTimer: ReturnType<typeof setTimeout> | null = null;
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   let driftTimer: ReturnType<typeof setInterval> | null = null;
   let bufferGraceTimer: ReturnType<typeof setTimeout> | null = null;
   let positionReportTimer: ReturnType<typeof setInterval> | null = null;
-
   let masterPlaybackState: {
     action: "play" | "pause";
     position: number;
@@ -52,7 +51,6 @@
   } | null = null;
   let videoReady = false;
   let pendingAction: { action: string; position: number } | null = null;
-
   let buffering = false;
   let reportedBuffering = false;
   let manualPlaybackRate = 1.0;
@@ -97,13 +95,13 @@
   };
 
   const BUFFER_GRACE_MS = 750;
-
   let syncStatusText = "Offset: -- ms | Syncing…";
 
   $: qualityLabel =
     selectedQuality === -1
       ? "Auto"
       : (sources[selectedQuality]?.quality ?? "Auto");
+
   $: subtitleLabel =
     selectedSubtitle === -1
       ? "Off"
@@ -142,19 +140,16 @@
   function setQuality(index: number) {
     selectedQuality = index;
     showQualityMenu = false;
-
     if (index === -1) {
       // "Auto" — let hls.js pick within the current playlist.
       if (hls) hls.currentLevel = -1;
       return;
     }
-
     // Each entry in `sources` is a *separate* m3u8 URL (often different
     // CDN/quality) — not a level inside the currently loaded playlist.
     // Switching requires reloading the source.
     const url = sources[index]?.url;
     if (!url || url === streamUrl) return;
-
     const resumeAt = video.currentTime;
     const wasPlaying = !video.paused;
     streamUrl = url;
@@ -172,12 +167,10 @@
     ignoreTrackModeChange = true;
     selectedSubtitle = index;
     showSubtitleMenu = false;
-
     const tracks = video.textTracks;
     for (let i = 0; i < tracks.length; i++) {
       tracks[i].mode = i === index ? "showing" : "disabled";
     }
-
     if (index >= 0) captureCueTimes(index, tracks[index]);
     applySubtitleOffset(subtitleOffset, index);
     setTimeout(() => (ignoreTrackModeChange = false), 0);
@@ -203,6 +196,7 @@
     subtitleOffset += d;
     applySubtitleOffset(subtitleOffset);
   };
+
   const resetSubtitleOffset = () => {
     subtitleOffset = 0;
     applySubtitleOffset(0);
@@ -327,6 +321,7 @@
       socket.send(
         JSON.stringify({ type: "join", name, clientId: crypto.randomUUID() }),
       );
+
       for (let i = 0; i < OFFSET_SAMPLES; i++) {
         setTimeout(() => {
           if (socket.readyState === WebSocket.OPEN) {
@@ -339,9 +334,11 @@
           }
         }, i * 200);
       }
+
       if (streamUrl) {
         socket.send(JSON.stringify({ type: "stream", url: streamUrl }));
       }
+
       startDriftCorrection();
       startPositionReporter();
     };
@@ -484,13 +481,11 @@
     // The old media is being replaced. Until the new media reports
     // "canplay", any incoming playback action must be deferred.
     videoReady = false;
-
     // Lazy-load hls.js only when actually needed
     if (!HlsClass) {
       const mod = await import("hls.js");
       HlsClass = mod.default;
     }
-
     if (HlsClass.isSupported()) {
       hls = new HlsClass({ capLevelToPlayerSize: false, autoStartLoad: true });
       hls.loadSource(url);
@@ -547,6 +542,7 @@
       pendingAction = { action, position };
       return;
     }
+
     if (action === "play") {
       suppressSeek(() => {
         video.currentTime = position + lateByMs / 1000;
@@ -574,7 +570,6 @@
         !videoReady ||
         !masterPlaybackState ||
         !video ||
-        video.paused ||
         buffering ||
         waitlocked ||
         syncCount === 0
@@ -582,6 +577,24 @@
         if (video) video.playbackRate = manualPlaybackRate;
         return;
       }
+
+      // If paused but should be playing, retry playback.
+      // Without this, a rejected video.play() (autoplay policy, transient
+      // error) leaves the client permanently stuck paused while the server
+      // thinks everyone is playing — drift correction never runs.
+      if (video.paused) {
+        if (masterPlaybackState.action === "play") {
+          suppressSeek(() => {
+            video.currentTime = masterPlaybackState!.position;
+          });
+          suppress(() => {
+            video.play().catch(() => {});
+          });
+        }
+        video.playbackRate = manualPlaybackRate;
+        return;
+      }
+
       if (masterPlaybackState.action !== "play") return;
 
       const serverNow = performance.now() + offset;
@@ -639,8 +652,8 @@
       t.id = `sub-${i}`;
       video.appendChild(t);
       t.addEventListener("load", () => {
-        captureCueTimes(i, t.track);
-        t.track.addEventListener("modechange", onTrackModeChange);
+        captureCueTimes(i, t.track!);
+        t.track!.addEventListener("modechange", onTrackModeChange);
       });
     });
 
@@ -668,9 +681,7 @@
 <div class="watch-container">
   <div class="top-bar">
     <button class="back-btn" on:click={handleBack}>← Back</button>
-
     <h1 class="movie-title">{movie.title}</h1>
-
     <button class="more-btn" on:click={() => (showMore = !showMore)}>
       <svg viewBox="0 0 24 24" fill="currentColor" class="more-icon">
         <circle cx="12" cy="5" r="2" />
@@ -688,7 +699,6 @@
       >
         Auto
       </button>
-
       {#each sources as src, i}
         <button
           class:active={selectedQuality === i}
@@ -706,7 +716,6 @@
       >
         Off
       </button>
-
       {#each subtitles as sub, i}
         <button
           class:active={selectedSubtitle === i}
@@ -738,7 +747,6 @@
         {waitlocked && othersWaiting.length > 0 ? "🟡" : "🟢"}
         {statusLine}
       </span>
-
       <button class="sync-btn" on:click={shareStream}>Share Stream</button>
       <button class="sync-btn" on:click={disconnectSync}>Leave</button>
     {:else}
@@ -747,7 +755,6 @@
         on:click={() => {
           const room = prompt("Room ID:")?.trim();
           const name = prompt("Your name:")?.trim();
-
           if (room && name) connectSync(room, name);
         }}
       >
@@ -791,8 +798,7 @@
     on:play={onPlay}
     on:pause={onPause}
     on:seeked={onSeeked}
-  >
-  </video>
+  ></video>
 </div>
 
 <style>
