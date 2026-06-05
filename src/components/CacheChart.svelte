@@ -1,20 +1,19 @@
 <script lang="ts">
-  import { afterUpdate, tick } from "svelte";
   import type { HealthInfo } from "../lib/proxy";
 
-  export let healthInfo: HealthInfo;
+  let { healthInfo }: { healthInfo: HealthInfo } = $props();
+  let canvas: HTMLCanvasElement | undefined = $state();
 
-  let canvas: HTMLCanvasElement;
+  $effect(() => {
+    if (healthInfo && canvas) drawChart(canvas, healthInfo);
+  });
 
-  $: if (healthInfo) tick().then(() => drawChart());
-
-  async function drawChart() {
-    if (!canvas) return;
+  function drawChart(canvas: HTMLCanvasElement, healthInfo: HealthInfo) {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const logicalSize = 100; // smaller pie
+    const logicalSize = 100;
     canvas.width = logicalSize * dpr;
     canvas.height = logicalSize * dpr;
     canvas.style.width = logicalSize + "px";
@@ -28,10 +27,12 @@
     const angle = (percent / 100) * 2 * Math.PI;
 
     ctx.clearRect(0, 0, logicalSize, logicalSize);
+    // background circle
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, 2 * Math.PI);
     ctx.fillStyle = "rgba(255,255,255,0.08)";
     ctx.fill();
+    // usage arc
     ctx.beginPath();
     ctx.moveTo(cx, cy);
     ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + angle);
@@ -41,7 +42,7 @@
     gradient.addColorStop(1, "#ff2d55");
     ctx.fillStyle = gradient;
     ctx.fill();
-
+    // text
     ctx.fillStyle = "#ffffff";
     ctx.font = "600 14px -apple-system, sans-serif";
     ctx.textAlign = "center";
@@ -58,15 +59,16 @@
   <div class="cache-info">
     <p class="cache-title">Cache</p>
     <p class="cache-stat">
-      {healthInfo.cache.current_bytes
-        ? (healthInfo.cache.current_bytes / 1e9).toFixed(1)
-        : "0"} / {healthInfo.cache.max_gb.toFixed(1)} GB
+      {(healthInfo.cache.current_bytes / 1e9).toFixed(1)} / {(
+        healthInfo.cache.max_bytes / 1e9
+      ).toFixed(1)} GB
     </p>
     <p class="cache-stat">{healthInfo.cache.entries} entries</p>
   </div>
 </div>
 
 <style>
+  /* styles unchanged */
   .cache-card {
     display: flex;
     align-items: center;

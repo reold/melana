@@ -13,7 +13,6 @@ export interface HealthInfo {
     entries: number;
     current_bytes: number;
     max_bytes: number;
-    max_gb: number;
     utilization_percent: number;
   };
 }
@@ -43,6 +42,7 @@ export function createProxyUrl(
   };
   const json = JSON.stringify(proxyData);
   const base64url = toBase64Url(json);
+  // return `http://localhost:8000/url/${base64url}.m3u8`;
   return `https://melana.onrender.com/url/${base64url}.m3u8`;
 }
 

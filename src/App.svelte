@@ -1,264 +1,249 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
-  import Header from "./components/Header.svelte";
-  import MovieGrid from "./components/MovieGrid.svelte";
-  import CacheIndicator from "./components/CacheIndicator.svelte";
-  import SortDropdown from "./components/SortDropdown.svelte";
+  import { onDestroy, onMount } from "svelte";
+  import HomeView from "./components/HomeView.svelte";
+  import LoadingOverlay from "./components/LoadingOverlay.svelte";
   import CustomStreamDialog from "./components/CustomStreamDialog.svelte";
   import JoinRoomDialog from "./components/JoinRoomDialog.svelte";
+  import type { CastMember, Movie } from "./lib/tmdb";
+  import { createHealthMonitor } from "./lib/healthMonitor";
   import {
-    fetchPopularMovies,
-    searchMovies,
-    fetchMovieCredits,
-    fetchMovieDetails,
-  } from "./lib/tmdb";
-  import type { Movie, CastMember } from "./lib/tmdb";
-  import { debounce } from "./lib/utils";
-  import { fetchMovieStreamUrl } from "./lib/videasy";
-  import { createProxyUrl, fetchHealth, type HealthInfo } from "./lib/proxy";
+    clearLocationHash,
+    loadMediaSelectionFromRoute,
+    parseMediaHash,
+    toEpisodeHash,
+    toMediaHash,
+    type MediaSelection,
+  } from "./lib/hashRouting";
+  import { fetchCastForMedia } from "./lib/mediaDetails";
+  import {
+    buildCustomWatchPayload,
+    buildEpisodeWatchPayload,
+    buildMovieWatchPayload,
+    type WatchPayload,
+  } from "./lib/streamPlayback";
+  import {
+    loadMoviePopupComponent,
+    loadWatchComponent,
+  } from "./lib/lazyComponents";
+  import type {
+    AppView,
+    EpisodeHashRequest,
+    EpisodePlayRequest,
+    SyncRoom,
+  } from "./lib/appTypes";
   import "./styles/global.css";
 
-  // Lazy-loaded components (heavy: gsap, hls.js live in these)
   let WatchComponent: any = null;
   let MoviePopupComponent: any = null;
-
-  let query = "";
-  let movies: Movie[] = [];
-  let loading = false;
-  let searchInput: HTMLInputElement | undefined;
-
   let selectedMovie: Movie | null = null;
+  let selectedEpisodeId: number | null = null;
+  let selectedSeasonNumber: number | null = null;
   let cast: CastMember[] = [];
   let sourceRect: DOMRect | null = null;
-
-  let view: "home" | "watch" = "home";
+  let view: AppView = "home";
   let watchMovie: Movie | null = null;
   let watchStreamUrl: string | null = null;
   let watchSubtitles: { url: string; lang: string; language: string }[] = [];
   let watchSources: { quality: string; url: string }[] = [];
+  let watchEpisodeId: number | undefined = undefined;
+  let watchSeasonNumber: number | undefined = undefined;
+  let watchShowId: number | undefined = undefined;
   let isTransitioning = false;
   let progressMessage = "";
-
-  let sortBy: "rating" | "name" | "date" = "rating";
-
   let showJoinRoom = false;
-  let syncRoom: { roomId: string; username: string } | null = null;
-
-  // Health / cache state
-  let healthInfo: HealthInfo | null = null;
-  let healthInterval: ReturnType<typeof setInterval>;
-  let cacheJustUpdated = false;
-  // Render/proxy cold-start state.
-  // Keep showing a disabled spinner until the proxy health endpoint replies.
-  let proxyStarting = true;
-  // Prevent stacking concurrent health checks during Render cold starts.
-  let healthInflight = false;
-
-  // Custom stream dialog
+  let syncRoom: SyncRoom | null = null;
   let showCustomStream = false;
   let customStreamUrl = "";
-  let customStreamOrigin = "https://cineby.sc";
+  let customStreamOrigin = "";
+  let skipNextHashChange = false;
 
-  // Preload heavy components in the background after first paint
-  onMount(async () => {
-    loading = true;
-    try {
-      movies = await fetchPopularMovies();
-    } catch (e) {
-      console.error("Failed to fetch popular movies", e);
-    }
-    loading = false;
+  let currentSource: string = "vidlink"; // <-- new state
+  let playCounter = 0;
 
-    searchInput?.focus();
+  const health = createHealthMonitor();
 
-    // Do not block the app on Render cold-start.
-    refreshHealth();
-    healthInterval = setInterval(refreshHealth, 10_000);
-
-    // Kick off lazy loads immediately after paint — not blocking
-    import("./components/Watch.svelte").then(
-      (m) => (WatchComponent = m.default),
-    );
-    import("./components/MoviePopup.svelte").then(
-      (m) => (MoviePopupComponent = m.default),
-    );
+  onMount(() => {
+    health.start();
+    void warmLazyComponents();
+    void handleHashChange();
+    window.addEventListener("hashchange", handleHashChange);
   });
 
-  const doSearch = debounce(async () => {
-    loading = true;
-    try {
-      movies = query ? await searchMovies(query) : await fetchPopularMovies();
-    } catch (e) {
-      console.error("Search failed", e);
-      movies = [];
-    }
-    loading = false;
-  }, 300);
-
-  // Re-run search whenever the query changes (including being cleared).
-  $: query, doSearch();
-
-  $: sortedMovies = [...movies].sort((a, b) => {
-    if (sortBy === "rating") {
-      return (b.vote_average ?? 0) - (a.vote_average ?? 0);
-    }
-    if (sortBy === "date") {
-      return (b.release_date ?? "").localeCompare(a.release_date ?? "");
-    }
-    return (a.title ?? "").localeCompare(b.title ?? "");
+  onDestroy(() => {
+    health.stop();
+    window.removeEventListener("hashchange", handleHashChange);
   });
 
-  async function refreshHealth() {
-    if (healthInflight) return;
-    healthInflight = true;
+  async function warmLazyComponents() {
     try {
-      const newHealth = await fetchHealth();
-      if (
-        healthInfo &&
-        newHealth.cache.utilization_percent !==
-          healthInfo.cache.utilization_percent
-      ) {
-        cacheJustUpdated = true;
-        setTimeout(() => (cacheJustUpdated = false), 1500);
-      }
-      healthInfo = newHealth;
-      proxyStarting = false;
-    } catch {
-      // If Render is still waking up — or the proxy has died mid-session —
-      // surface the spinner again.
-      proxyStarting = true;
-    } finally {
-      healthInflight = false;
+      const [Watch, MoviePopup] = await Promise.all([
+        loadWatchComponent(),
+        loadMoviePopupComponent(),
+      ]);
+      WatchComponent = Watch;
+      MoviePopupComponent = MoviePopup;
+    } catch (error) {
+      console.error("Failed to warm lazy components", error);
     }
   }
 
-  onDestroy(() => clearInterval(healthInterval));
+  async function ensureWatchComponent() {
+    if (!WatchComponent) {
+      WatchComponent = await loadWatchComponent();
+    }
+  }
+
+  async function ensureMoviePopupComponent() {
+    if (!MoviePopupComponent) {
+      MoviePopupComponent = await loadMoviePopupComponent();
+    }
+  }
+
+  async function handleHashChange() {
+    if (skipNextHashChange) {
+      skipNextHashChange = false;
+      return;
+    }
+    const route = parseMediaHash(window.location.hash);
+    if (!route) return;
+
+    try {
+      const selection = await loadMediaSelectionFromRoute(route);
+      if (selection) {
+        await openMediaSelection(selection, null);
+      }
+    } catch (error) {
+      console.error("Failed to load media from hash", error);
+    }
+  }
+
+  async function openMediaSelection(
+    selection: MediaSelection,
+    rect: DOMRect | null,
+  ) {
+    selectedMovie = selection.movie;
+    selectedEpisodeId = selection.selectedEpisodeId;
+    selectedSeasonNumber = selection.selectedSeasonNumber;
+    cast = selection.cast;
+    sourceRect = rect;
+    view = "home";
+    watchMovie = null;
+    watchStreamUrl = null;
+    watchSubtitles = [];
+    watchSources = [];
+    syncRoom = null;
+    watchEpisodeId = undefined;
+    watchSeasonNumber = undefined;
+    watchShowId = undefined;
+    await ensureMoviePopupComponent();
+  }
 
   function handleMovieSelect(movie: Movie, rect: DOMRect) {
     selectedMovie = movie;
+    selectedEpisodeId = null;
+    selectedSeasonNumber = null;
     sourceRect = rect;
+    cast = [];
+    view = "home";
+    void ensureMoviePopupComponent();
 
-    // Ensure MoviePopup is loaded (should already be preloaded)
-    if (!MoviePopupComponent) {
-      import("./components/MoviePopup.svelte").then(
-        (m) => (MoviePopupComponent = m.default),
-      );
-    }
+    fetchCastForMedia(movie)
+      .then((credits) => {
+        if (selectedMovie?.id === movie.id) {
+          cast = credits;
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to fetch cast", error);
+        if (selectedMovie?.id === movie.id) {
+          cast = [];
+        }
+      });
 
-    fetchMovieCredits(movie.id)
-      .then((c) => (cast = c))
-      .catch(() => (cast = []));
+    skipNextHashChange = true;
+    window.location.hash = toMediaHash(movie);
+  }
+
+  function handleSelectEpisode(episodeData: EpisodeHashRequest) {
+    skipNextHashChange = true;
+    window.location.hash = toEpisodeHash(episodeData);
   }
 
   function handleClosePopup() {
     selectedMovie = null;
+    selectedEpisodeId = null;
+    selectedSeasonNumber = null;
     sourceRect = null;
     cast = [];
+    clearLocationHash();
   }
 
-  async function handlePlay(movie: Movie) {
+  function applyWatchPayload(payload: WatchPayload) {
+    watchMovie = payload.movie;
+    watchStreamUrl = payload.streamUrl;
+    watchSubtitles = payload.subtitles;
+    watchSources = payload.sources;
+    watchEpisodeId = payload.episodeId;
+    watchSeasonNumber = payload.seasonNumber;
+    watchShowId = payload.tvShowId;
+    view = "watch";
+    playCounter++;
+  }
+
+  async function runPlaybackTransition(
+    task: (onProgress: (message: string) => void) => Promise<WatchPayload>,
+    fallbackErrorMessage: string,
+  ) {
     isTransitioning = true;
-    progressMessage = "Fetching movie details...";
-
-    // Ensure Watch is loaded before we switch view
-    if (!WatchComponent) {
-      const mod = await import("./components/Watch.svelte");
-      WatchComponent = mod.default;
-    }
-
+    progressMessage = "Preparing player...";
     try {
-      const details = await fetchMovieDetails(movie.id);
-      if (!details.imdb_id) throw new Error("Missing imdb_id");
-
-      progressMessage = "Finding best stream...";
-      const result = await fetchMovieStreamUrl({
-        title: details.title,
-        year: details.release_date?.slice(0, 4) ?? "",
-        tmdbId: details.id,
-        imdbId: details.imdb_id,
+      await ensureWatchComponent();
+      const payload = await task((message) => {
+        progressMessage = message;
       });
-
-      progressMessage = "Proxying stream...";
-      const bestSource =
-        result.sources.find((s) => s.quality === "1080p") ?? result.sources[0];
-      if (!bestSource) throw new Error("No stream found");
-
-      watchStreamUrl = createProxyUrl(bestSource.url);
-      watchSources = result.sources.map((s) => ({
-        quality: s.quality,
-        url: createProxyUrl(s.url),
-      }));
-      watchSubtitles = dedupeSubtitles(
-        result.subtitles.map((sub) => ({
-          ...sub,
-          url: createProxyUrl(sub.url),
-        })),
-      );
-      watchMovie = details;
-
-      progressMessage = "Loading player...";
-      await new Promise((r) => setTimeout(r, 400));
-      view = "watch";
-    } catch (e) {
-      console.error(e);
-      alert("Could not load stream. Try another movie.");
+      applyWatchPayload(payload);
+    } catch (error) {
+      console.error(error);
+      alert(error instanceof Error ? error.message : fallbackErrorMessage);
     } finally {
       isTransitioning = false;
       progressMessage = "";
     }
+  }
+
+  // Updated handlers to pass currentSource
+  async function handlePlay(movie: Movie) {
+    if (movie.media_type === "tv") {
+      alert("Select an episode from the show details to start watching.");
+      return;
+    }
+    await runPlaybackTransition(
+      (onProgress) => buildMovieWatchPayload(movie, onProgress, currentSource),
+      "Could not load stream. Try another movie.",
+    );
+  }
+
+  async function handlePlayEpisode(episodeData: EpisodePlayRequest) {
+    await runPlaybackTransition(
+      (onProgress) =>
+        buildEpisodeWatchPayload(episodeData, onProgress, currentSource),
+      "Could not load episode stream.",
+    );
   }
 
   async function handleCustomStream() {
-    const url = customStreamUrl.trim();
-    const origin = customStreamOrigin.trim() || "https://cineby.sc";
-    if (!url || !url.endsWith(".m3u8")) {
-      alert("Invalid .m3u8 URL");
-      return;
-    }
-
-    isTransitioning = true;
-    progressMessage = "Proxying custom stream...";
-
-    if (!WatchComponent) {
-      const mod = await import("./components/Watch.svelte");
-      WatchComponent = mod.default;
-    }
-
-    try {
-      watchStreamUrl = createProxyUrl(url, origin);
-      watchSources = [{ quality: "Custom", url: watchStreamUrl }];
-      watchSubtitles = [];
-      watchMovie = {
-        id: 0,
-        title: "Custom Stream",
-        poster_path: null,
-        backdrop_path: null,
-        release_date: "",
-        vote_average: 0,
-        overview: "",
-      };
+    await runPlaybackTransition(
+      (onProgress) =>
+        buildCustomWatchPayload(
+          customStreamUrl,
+          customStreamOrigin,
+          onProgress,
+        ),
+      "Failed to load custom stream.",
+    );
+    if (watchStreamUrl) {
       showCustomStream = false;
-      await new Promise((r) => setTimeout(r, 400));
-      view = "watch";
-    } catch (e) {
-      console.error(e);
-      alert("Failed to load custom stream.");
-    } finally {
-      isTransitioning = false;
-      progressMessage = "";
     }
-  }
-
-  function dedupeSubtitles(
-    subs: { lang: string; language: string; url: string }[],
-  ) {
-    const seen = new Set<string>();
-    return subs.filter((sub) => {
-      const key = sub.language.toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
   }
 
   function handleBack() {
@@ -267,88 +252,52 @@
     watchStreamUrl = null;
     watchSubtitles = [];
     watchSources = [];
+    syncRoom = null;
+    watchEpisodeId = undefined;
+    watchSeasonNumber = undefined;
+    watchShowId = undefined;
   }
 
   function handleJoinRoom(username: string, roomId: string) {
     syncRoom = { roomId, username };
     showJoinRoom = false;
   }
-
-  function handleLeaveSync() {
-    syncRoom = null;
-  }
 </script>
 
 <svelte:head>
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+  />
   <title>Melana</title>
 </svelte:head>
 
 {#if view === "home"}
-  <main class="wrap">
-    <Header bind:query bind:searchInput onSearch={() => doSearch()} />
+  <HomeView
+    healthInfo={$health.healthInfo}
+    cacheJustUpdated={$health.cacheJustUpdated}
+    proxyStarting={$health.proxyStarting}
+    activeMovieId={selectedMovie?.id}
+    onselect={handleMovieSelect}
+    onplay={handlePlay}
+    onJoinRoom={() => (showJoinRoom = true)}
+    onCustomStream={() => (showCustomStream = true)}
+    {currentSource}
+    onSourceChange={(v) => (currentSource = v)}
+  />
 
-    <div class="toolbar">
-      <button
-        class="custom-stream-btn"
-        on:click={() => (showCustomStream = true)}
-      >
-        <svg
-          class="plus-icon"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.5"
-          stroke-linecap="round"
-        >
-          <path d="M12 5v14M5 12h14" />
-        </svg>
-        Custom Stream
-      </button>
-
-      <SortDropdown {sortBy} onchange={(e) => (sortBy = e)} />
-
-      <button
-        class="sort-btn join-room-btn"
-        on:click={() => (showJoinRoom = true)}
-      >
-        <svg
-          class="join-icon"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <path d="M15 15l-6 6m0 0l-6-6m6 6V3" />
-        </svg>
-        Join Room
-      </button>
-
-      <div class="cache-inline">
-        <CacheIndicator
-          {healthInfo}
-          {cacheJustUpdated}
-          loading={proxyStarting}
-        />
-      </div>
-    </div>
-
-    <MovieGrid
-      movies={sortedMovies}
-      isLoading={loading}
-      onselect={handleMovieSelect}
-      onplay={handlePlay}
-    />
-  </main>
-
-  <!-- Lazy-rendered popup -->
-  {#if selectedMovie && sourceRect && MoviePopupComponent}
+  {#if selectedMovie && MoviePopupComponent}
     <svelte:component
       this={MoviePopupComponent}
       movie={selectedMovie}
       {cast}
       {sourceRect}
+      {selectedEpisodeId}
+      {selectedSeasonNumber}
       onclose={handleClosePopup}
       onplay={handlePlay}
+      onplayEpisode={handlePlayEpisode}
+      onSelectEpisode={handleSelectEpisode}
     />
   {/if}
 {:else if watchMovie && watchStreamUrl && WatchComponent}
@@ -358,23 +307,22 @@
     streamUrl={watchStreamUrl}
     subtitles={watchSubtitles}
     sources={watchSources}
-    {healthInfo}
-    {proxyStarting}
+    healthInfo={$health.healthInfo}
+    proxyStarting={$health.proxyStarting}
     {syncRoom}
     onback={handleBack}
+    episodeId={watchEpisodeId}
+    seasonNumber={watchSeasonNumber}
+    showId={watchShowId}
+    playId={playCounter}
+    onplayEpisode={handlePlayEpisode}
+    onselectEpisode={handleSelectEpisode}
+    onplay={handlePlay}
   />
 {/if}
 
-<!-- Loading overlay -->
 {#if isTransitioning}
-  <div class="loading-overlay">
-    <div class="loading-card">
-      <p class="progress-text">{progressMessage}</p>
-      <div class="progress-bar">
-        <div class="progress-fill"></div>
-      </div>
-    </div>
-  </div>
+  <LoadingOverlay message={progressMessage} />
 {/if}
 
 {#if showJoinRoom}
@@ -392,126 +340,3 @@
     onclose={() => (showCustomStream = false)}
   />
 {/if}
-
-<style>
-  .join-room-btn {
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    color: var(--color-text-primary);
-    border-radius: 8px;
-    padding: 6px 14px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background 0.2s;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .join-room-btn:hover {
-    background: rgba(255, 255, 255, 0.2);
-  }
-  .join-icon {
-    width: 18px;
-    height: 18px;
-  }
-  .wrap {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 32px 20px;
-  }
-  .toolbar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 24px;
-    flex-wrap: wrap;
-  }
-  .custom-stream-btn {
-    background: var(--color-accent-blue);
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    padding: 6px 14px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background 0.2s;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .custom-stream-btn:hover {
-    background: #0070e9;
-  }
-  .plus-icon {
-    width: 18px;
-    height: 18px;
-  }
-  .cache-inline {
-    display: flex;
-    align-items: center;
-  }
-  .loading-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 2000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(12px);
-  }
-  .loading-card {
-    background: var(--color-bg-surface);
-    border-radius: 16px;
-    padding: 32px 40px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 16px;
-    box-shadow: var(--shadow-elevated);
-    min-width: 280px;
-  }
-  .progress-text {
-    font-size: 15px;
-    color: var(--color-text-secondary);
-    font-weight: 500;
-    margin: 0;
-  }
-  .progress-bar {
-    width: 100%;
-    height: 4px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 2px;
-    overflow: hidden;
-  }
-  .progress-fill {
-    height: 100%;
-    width: 60%;
-    background: var(--color-accent-blue);
-    border-radius: 2px;
-    animation: progress-indeterminate 1.4s ease-in-out infinite;
-  }
-  @keyframes progress-indeterminate {
-    0% {
-      transform: translateX(-100%);
-    }
-    50% {
-      transform: translateX(0%);
-    }
-    100% {
-      transform: translateX(100%);
-    }
-  }
-  @media (max-width: 768px) {
-    .wrap {
-      padding: 24px 16px;
-    }
-  }
-  @media (max-width: 480px) {
-    .wrap {
-      padding: 16px 12px;
-    }
-  }
-</style>

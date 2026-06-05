@@ -75,7 +75,7 @@
     border: none;
     background: var(--color-bg-elevated);
     color: var(--color-text-primary);
-    font-size: 14px;
+    font-size: 16px;
     outline: none;
   }
   .field:focus {

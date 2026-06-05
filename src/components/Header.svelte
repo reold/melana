@@ -61,7 +61,7 @@
   .logo-icon {
     width: 40px;
     height: 40px;
-    color: #fff; /* white to blend with aurora */
+    color: #fff;
     flex-shrink: 0;
     position: relative;
     z-index: 1; /* above aurora */
@@ -135,7 +135,6 @@
       aurora-4 24s ease-in-out infinite alternate;
   }
 
-  /* … keyframes unchanged … */
   @keyframes aurora-1 {
     0% {
       top: 0;

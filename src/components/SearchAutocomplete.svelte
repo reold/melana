@@ -36,7 +36,7 @@
   function selectSuggestion(movie: Movie) {
     query = movie.title;
     showSuggestions = false;
-    onsearch();
+    // Don't call onsearch() here – the query change triggers the parent's search
     searchInput?.focus();
   }
 
@@ -85,7 +85,6 @@
     on:keydown={handleKeydown}
   />
 
-  <!-- Clear button (X) shown when there is text -->
   {#if query}
     <button
       class="clear-btn"
@@ -146,13 +145,13 @@
   }
   .search-input {
     flex: 1;
-    padding: 10px 40px 10px 16px; /* right padding for clear button */
+    padding: 10px 40px 10px 16px;
     border-radius: 20px;
     border: none;
     background: var(--color-bg-elevated);
     color: var(--color-text-primary);
     outline: none;
-    font-size: 16px; /* prevent iOS zoom */
+    font-size: 16px;
     font-weight: 500;
     transition: background 0.2s;
     backdrop-filter: blur(10px);
@@ -165,10 +164,9 @@
     box-shadow: 0 0 0 2px var(--color-accent-blue);
   }
 
-  /* Clear button */
   .clear-btn {
     position: absolute;
-    right: 48px; /* to the left of the search icon button */
+    right: 48px;
     top: 50%;
     transform: translateY(-50%);
     background: none;

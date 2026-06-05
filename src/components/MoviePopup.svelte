@@ -1,88 +1,184 @@
+<!-- components/MoviePopup.svelte -->
 <script lang="ts">
   import { onMount } from "svelte";
-  import { gsap } from "gsap";
   import type { Movie, CastMember } from "../lib/tmdb";
+  import {
+    fetchMovieDetails,
+    fetchTVDetails,
+    fetchSeasonEpisodes,
+    type TVDetails,
+    type Episode,
+  } from "../lib/tmdb";
+  import {
+    runEntranceAnimation,
+    runExitAnimation,
+  } from "../lib/popupAnimations";
+  import CastSection from "./CastSection.svelte";
+  import EpisodeCard from "./EpisodeCard.svelte";
+  import Carousel from "./Carousel.svelte";
+  import SeasonCard from "./SeasonCard.svelte";
 
   export let movie: Movie;
   export let cast: CastMember[];
-  export let sourceRect: DOMRect;
+  export let sourceRect: DOMRect | null;
+  export let selectedEpisodeId: number | null = null;
+  export let selectedSeasonNumber: number | null = null;
+
   export let onclose: () => void = () => {};
   export let onplay: (movie: Movie) => void = () => {};
+  export let onplayEpisode: (data: {
+    episodeId: number;
+    showTitle: string;
+    year: string;
+    tmdbId: number;
+    season: number;
+    episodeNumber: number;
+    episodeName: string;
+  }) => void = () => {};
+  export let onSelectEpisode: (data: {
+    tmdbId: number;
+    season: number;
+    episodeNumber: number;
+  }) => void = () => {};
 
-  let showAllCast = false;
   let popup: HTMLDivElement;
   let overlay: HTMLDivElement;
-  let posterImg: HTMLImageElement;
+  let details: any | null = null;
+  let isTV = movie.media_type === "tv" || false;
+  let tvDetails: TVDetails | null = null;
+  let selectedSeason: number | null = null;
+  let episodes: Episode[] = [];
+  let loadingEpisodes = false;
+  let detailsLoading = false;
+  let detailsError = false;
+  let episodeError = false;
+  let isClosing = false;
+  let entranceTimeline: any = null;
 
-  $: truncatedCast = showAllCast ? cast : cast.slice(0, 5);
-  $: remainingCount = cast.length - 5;
+  $: displayableSeasons = tvDetails
+    ? tvDetails.seasons.filter(
+        (s) =>
+          s.season_number > 0 &&
+          (s.episode_count === null || s.episode_count > 0),
+      )
+    : [];
 
   function close() {
-    onclose();
+    if (isClosing) return;
+    isClosing = true;
+    const isMobileCard = window.innerWidth <= 480;
+    const cardArtHeight = isMobileCard ? 220 : 280;
+    runExitAnimation(overlay, popup, sourceRect, cardArtHeight, onclose);
   }
 
   function backdropClick(e: MouseEvent) {
     if (e.target === e.currentTarget) close();
   }
 
-  function handleOverlayKeydown(e: KeyboardEvent) {
-    if (e.key === "Escape") close();
-  }
-
   function handlePlay() {
     onplay(movie);
   }
 
+  function handleEpisodePlay(ep: Episode) {
+    onplayEpisode({
+      episodeId: ep.id,
+      showTitle: movie.title,
+      year: tvDetails?.first_air_date?.slice(0, 4) ?? "",
+      tmdbId: movie.id,
+      season: ep.season_number,
+      episodeNumber: ep.episode_number,
+      episodeName: ep.name,
+    });
+  }
+
+  function handleSelectEpisode(ep: Episode) {
+    onSelectEpisode({
+      tmdbId: movie.id,
+      season: ep.season_number,
+      episodeNumber: ep.episode_number,
+    });
+  }
+
+  function handlePlayFirstEpisode() {
+    if (episodes.length > 0) handleEpisodePlay(episodes[0]);
+  }
+
+  function handlePlayLastEpisode() {
+    if (tvDetails?.last_episode_to_air) {
+      const le = tvDetails.last_episode_to_air;
+      onplayEpisode({
+        episodeId: le.id,
+        showTitle: movie.title,
+        year: tvDetails.first_air_date?.slice(0, 4) ?? "",
+        tmdbId: movie.id,
+        season: le.season_number,
+        episodeNumber: le.episode_number,
+        episodeName: le.name,
+      });
+    }
+  }
+
+  async function loadDetails() {
+    detailsLoading = true;
+    detailsError = false;
+    try {
+      if (isTV) {
+        tvDetails = await fetchTVDetails(movie.id);
+        details = tvDetails;
+        if (selectedSeasonNumber) await selectSeason(selectedSeasonNumber);
+      } else {
+        details = await fetchMovieDetails(movie.id);
+      }
+    } catch (e) {
+      console.error(e);
+      detailsError = true;
+    } finally {
+      detailsLoading = false;
+    }
+  }
+
+  async function selectSeason(seasonNumber: number) {
+    selectedSeason = seasonNumber;
+    loadingEpisodes = true;
+    episodes = [];
+    episodeError = false;
+    try {
+      episodes = await fetchSeasonEpisodes(movie.id, seasonNumber);
+    } catch (e) {
+      console.error(e);
+      episodes = [];
+      episodeError = true;
+    } finally {
+      loadingEpisodes = false;
+    }
+  }
+
+  function backToSeasons() {
+    selectedSeason = null;
+    episodes = [];
+    episodeError = false;
+  }
+
+  onMount(async () => {
+    const isMobileCard = window.innerWidth <= 480;
+    const cardArtHeight = isMobileCard ? 220 : 280;
+    entranceTimeline = await runEntranceAnimation(
+      overlay,
+      popup,
+      sourceRect,
+      cardArtHeight,
+    );
+    void loadDetails();
+  });
+
   $: backdrop = movie.backdrop_path
     ? `https://image.tmdb.org/t/p/w1280${movie.backdrop_path}`
     : null;
-  $: poster = movie.poster_path
+  $: posterUrl = movie.poster_path
     ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
     : "/placeholder.jpg";
-
-  onMount(() => {
-    gsap.fromTo(
-      overlay,
-      { opacity: 0, duration: 0.3 },
-      { opacity: 1, ease: "power2.out" },
-    );
-
-    if (posterImg && sourceRect) {
-      const targetRect = posterImg.getBoundingClientRect();
-      const deltaX = sourceRect.left - targetRect.left;
-      const deltaY = sourceRect.top - targetRect.top;
-      const scaleX = sourceRect.width / targetRect.width;
-      const scaleY = sourceRect.height / targetRect.height;
-
-      gsap.fromTo(
-        posterImg,
-        {
-          x: deltaX,
-          y: deltaY,
-          scaleX,
-          scaleY,
-          transformOrigin: "top left",
-        },
-        {
-          x: 0,
-          y: 0,
-          scaleX: 1,
-          scaleY: 1,
-          duration: 0.4,
-          ease: "back.out(1.2)",
-        },
-      );
-    }
-
-    gsap.fromTo(
-      popup,
-      { scale: 0.95, opacity: 0, duration: 0.3 },
-      { scale: 1, opacity: 1, ease: "back.out(1.2)" },
-    );
-  });
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   bind:this={overlay}
   class="overlay"
@@ -91,17 +187,15 @@
   aria-label="Movie details"
   tabindex="-1"
   on:click={backdropClick}
-  on:keydown={handleOverlayKeydown}
+  on:keydown={(e) => e.key === "Escape" && close()}
 >
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     bind:this={popup}
     class="card"
     role="presentation"
     on:click|stopPropagation
-    on:keydown={() => {}}
   >
-    <button class="close-btn" on:click={close} aria-label="Close">
+    <button class="close-btn fade-content" on:click={close} aria-label="Close">
       <svg
         xmlns="http://www.w3.org/2000/svg"
         fill="none"
@@ -119,31 +213,58 @@
     </button>
 
     {#if backdrop}
-      <div class="hero" style="background-image: url({backdrop})">
+      <div class="hero fade-content" style="background-image: url({backdrop})">
         <div class="hero-gradient"></div>
       </div>
     {/if}
 
     <div class="content">
       <div class="poster-wrapper">
-        <img
-          src={poster}
-          alt={movie.title}
-          style="view-transition-name: movie-poster"
-          class="poster"
-        />
+        <img src={posterUrl} alt={movie.title} class="poster" />
       </div>
 
       <div class="info">
         <div class="title-row">
-          <h2 style="view-transition-name: movie-title">{movie.title}</h2>
-          <button class="btn-play" on:click={handlePlay}>▶ Play</button>
+          <h2>{movie.title}</h2>
+          {#if !isTV}
+            <button class="btn-play fade-content" on:click={handlePlay}>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                class="play-svg"
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M4.5 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653Z"
+                  clip-rule="evenodd"
+                />
+              </svg>
+              Play
+            </button>
+          {:else if tvDetails && selectedSeason && episodes.length > 0 && !loadingEpisodes}
+            <button
+              class="btn-play-first fade-content"
+              on:click={handlePlayFirstEpisode}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                class="play-svg"
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M4.5 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653Z"
+                  clip-rule="evenodd"
+                />
+              </svg>
+              Play First
+            </button>
+          {/if}
         </div>
-        {#if movie.release_date}
-          <p class="release" style="view-transition-name: movie-date">
-            {movie.release_date.slice(0, 4)}
-          </p>
-        {/if}
+
+        <p class="release fade-content">{movie.release_date || "N/A"}</p>
         <div class="rating">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -157,38 +278,177 @@
               clip-rule="evenodd"
             />
           </svg>
-          {movie.vote_average?.toFixed(1)} / 10
+          {movie.vote_average?.toFixed(1) ?? "N/A"} / 10
         </div>
-        <p class="overview">{movie.overview || "No overview available."}</p>
+        <p class="overview fade-content">
+          {movie.overview || "No overview available."}
+        </p>
 
-        {#if cast.length > 0}
-          <div class="cast-section">
-            <h3>Top Cast</h3>
-            <div class="cast-list">
-              {#each truncatedCast as actor}
-                <div class="cast-chip">
-                  {#if actor.profile_path}
-                    <img
-                      src={`https://image.tmdb.org/t/p/w92${actor.profile_path}`}
-                      alt={actor.name}
+        {#if detailsError}
+          <p class="error-msg fade-content">
+            Failed to load details. Please try again later.
+          </p>
+        {/if}
+
+        {#if details && !detailsLoading}
+          <div class="tv-meta fade-content">
+            {#if details.genres?.length}
+              <div class="genre-tags">
+                {#each details.genres as g}
+                  <span class="genre-pill">{g.name}</span>
+                {/each}
+              </div>
+            {/if}
+
+            {#if isTV}
+              <div class="tv-stats">
+                {#if details.status && details.status !== "Released"}
+                  <span class="stat">{details.status}</span>
+                  <span class="separator">•</span>
+                {/if}
+                <span class="stat">{details.number_of_seasons} seasons</span>
+                <span class="separator">•</span>
+                <span class="stat">{details.number_of_episodes} episodes</span>
+              </div>
+              {#if details.created_by?.length}
+                <p class="creators">
+                  Created by: {details.created_by.map((c) => c.name).join(", ")}
+                </p>
+              {/if}
+              {#if details.networks?.length}
+                <p class="networks">
+                  Network: {details.networks.map((n) => n.name).join(", ")}
+                </p>
+              {/if}
+              {#if details.last_episode_to_air}
+                <button class="last-ep-btn" on:click={handlePlayLastEpisode}>
+                  Last aired: {details.last_episode_to_air.name} ({details
+                    .last_episode_to_air.air_date})
+                </button>
+              {/if}
+              {#if details.next_episode_to_air}
+                <p class="next-ep">
+                  Next: {details.next_episode_to_air.name} ({details
+                    .next_episode_to_air.air_date})
+                </p>
+              {/if}
+            {:else}
+              {#if details.status && details.status !== "Released"}
+                <p class="stat">Status: {details.status}</p>
+              {/if}
+              {#if details.production_companies?.length}
+                <p class="networks">
+                  Production: {details.production_companies
+                    .map((c) => c.name)
+                    .join(", ")}
+                </p>
+              {/if}
+              {#if details.credits?.crew}
+                {@const director = details.credits.crew.find(
+                  (c) => c.job === "Director",
+                )}
+                {#if director}
+                  <p class="creators">Director: {director.name}</p>
+                {/if}
+              {/if}
+            {/if}
+          </div>
+        {/if}
+
+        <CastSection {cast} />
+
+        {#if isTV && tvDetails && !detailsLoading}
+          <div class="fade-content">
+            {#if !selectedSeason}
+              {#if displayableSeasons.length > 0}
+                <div class="carousel-section">
+                  <h3>Seasons</h3>
+                  <Carousel
+                    items={displayableSeasons}
+                    cardWidth={180}
+                    cardGap={16}
+                    key="season_number"
+                    let:item={season}
+                  >
+                    <SeasonCard
+                      {season}
+                      highlight={season.season_number === selectedSeasonNumber}
+                      onclick={() => selectSeason(season.season_number)}
                     />
-                  {:else}
-                    <div class="placeholder-avatar">?</div>
-                  {/if}
-                  <div>
-                    <p class="actor-name">{actor.name}</p>
-                    <p class="actor-character">{actor.character}</p>
-                  </div>
+                  </Carousel>
                 </div>
-              {/each}
-            </div>
-            {#if remainingCount > 0}
-              <button
-                class="show-more-btn"
-                on:click={() => (showAllCast = !showAllCast)}
-              >
-                {showAllCast ? "Show less" : `+${remainingCount} more`}
-              </button>
+              {:else}
+                <div class="no-seasons-msg">
+                  <p>No seasons available for this show.</p>
+                </div>
+              {/if}
+            {:else}
+              <div class="carousel-section">
+                <div
+                  style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;"
+                >
+                  <button class="back-to-seasons" on:click={backToSeasons}>
+                    ← Back to Seasons
+                  </button>
+                  <h3>Episodes – Season {selectedSeason}</h3>
+                  {#if episodes.length > 0 && !loadingEpisodes}
+                    <button
+                      class="btn-play-first"
+                      on:click={handlePlayFirstEpisode}
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        class="play-svg"
+                      >
+                        <path
+                          fill-rule="evenodd"
+                          d="M4.5 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653Z"
+                          clip-rule="evenodd"
+                        />
+                      </svg>
+                      Play First
+                    </button>
+                  {/if}
+                </div>
+
+                {#if loadingEpisodes}
+                  <div class="loading-episodes">
+                    <div class="loading-spinner"></div>
+                    <p>Loading episodes...</p>
+                  </div>
+                {:else if episodeError}
+                  <div class="error-msg">
+                    <p>Failed to load episodes.</p>
+                    <button
+                      class="retry-btn"
+                      on:click={() => selectSeason(selectedSeason!)}
+                    >
+                      Retry
+                    </button>
+                  </div>
+                {:else if episodes.length === 0}
+                  <div class="no-episodes-msg">
+                    <p>No episodes available for this season.</p>
+                  </div>
+                {:else}
+                  <Carousel
+                    items={episodes}
+                    cardWidth={180}
+                    cardGap={16}
+                    key="id"
+                    let:item={ep}
+                  >
+                    <EpisodeCard
+                      {ep}
+                      isSelected={ep.id === selectedEpisodeId}
+                      onplay={() => handleEpisodePlay(ep)}
+                      onselect={() => handleSelectEpisode(ep)}
+                    />
+                  </Carousel>
+                {/if}
+              </div>
             {/if}
           </div>
         {/if}
@@ -209,19 +469,24 @@
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     padding: 24px;
+    opacity: 0;
   }
-
   .card {
     position: relative;
     width: 100%;
     max-width: 780px;
     max-height: 90vh;
     overflow-y: auto;
+    overflow-x: hidden;
     background: var(--color-bg-surface);
     border-radius: 20px;
     box-shadow: var(--shadow-elevated);
+    opacity: 0;
+    transform-origin: top left;
   }
-
+  .fade-content {
+    will-change: opacity, transform;
+  }
   .close-btn {
     position: absolute;
     top: 16px;
@@ -240,16 +505,13 @@
     z-index: 10;
     transition: background 0.2s;
   }
-
   .close-btn:hover {
     background: rgba(255, 255, 255, 0.2);
   }
-
   .close-icon {
     width: 18px;
     height: 18px;
   }
-
   .hero {
     height: 200px;
     background-size: cover;
@@ -257,7 +519,6 @@
     border-radius: 20px 20px 0 0;
     position: relative;
   }
-
   .hero-gradient {
     position: absolute;
     inset: 0;
@@ -267,7 +528,6 @@
       transparent 60%
     );
   }
-
   .content {
     padding: 0 24px 24px;
     display: flex;
@@ -275,24 +535,26 @@
     margin-top: -60px;
     position: relative;
   }
-
   .poster-wrapper {
     width: 150px;
     flex-shrink: 0;
   }
-
   .poster {
     width: 100%;
+    aspect-ratio: 2 / 3;
+    display: block;
     border-radius: 12px;
     box-shadow: var(--shadow-elevated);
     object-fit: cover;
     border: 1px solid rgba(255, 255, 255, 0.1);
+    will-change: transform;
   }
-
   .info {
     flex: 1;
+    min-width: 0;
+    overflow-wrap: break-word;
+    word-break: break-word;
   }
-
   .title-row {
     display: flex;
     align-items: center;
@@ -300,16 +562,16 @@
     gap: 12px;
     margin-bottom: 4px;
   }
-
   h2 {
     font-size: 24px;
     font-weight: 700;
     margin: 0;
     letter-spacing: -0.3px;
     flex: 1;
+    will-change: transform;
   }
-
-  .btn-play {
+  .btn-play,
+  .btn-play-first {
     background: var(--color-accent-green);
     color: #fff;
     border: none;
@@ -318,22 +580,32 @@
     font-size: 15px;
     font-weight: 600;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
     transition: background 0.2s;
     white-space: nowrap;
     flex-shrink: 0;
   }
-
+  .btn-play-first {
+    background: var(--color-accent-orange);
+  }
   .btn-play:hover {
     background: #30b94e;
   }
-
+  .btn-play-first:hover {
+    background: #e08600;
+  }
+  .play-svg {
+    width: 18px;
+    height: 18px;
+  }
   .release {
     font-size: 15px;
     color: var(--color-text-secondary);
     margin: 0 0 12px 0;
     font-weight: 500;
   }
-
   .rating {
     font-size: 16px;
     font-weight: 600;
@@ -342,103 +614,180 @@
     display: flex;
     align-items: center;
     gap: 4px;
+    will-change: transform;
   }
-
   .star-icon {
     width: 18px;
     height: 18px;
     color: var(--color-accent-orange);
   }
-
   .overview {
     font-size: 14px;
     line-height: 1.5;
     color: var(--color-text-secondary);
     margin-bottom: 24px;
+    word-break: break-word;
+    overflow-wrap: break-word;
   }
-
-  .cast-section h3 {
-    font-size: 17px;
-    font-weight: 600;
-    margin: 0 0 12px 0;
+  .error-msg {
+    color: var(--color-accent-pink);
+    font-size: 14px;
+    margin-bottom: 16px;
   }
-
-  .cast-list {
+  .tv-meta {
+    margin-bottom: 16px;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+  }
+  .genre-tags {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 6px;
+    margin-bottom: 8px;
   }
-
-  .cast-chip {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: rgba(255, 255, 255, 0.08);
-    border-radius: 20px;
-    padding: 6px 14px 6px 6px;
-  }
-
-  .cast-chip img {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    object-fit: cover;
-  }
-
-  .placeholder-avatar {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.1);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 14px;
-  }
-
-  .actor-name {
-    font-size: 13px;
-    font-weight: 600;
-    margin: 0;
-  }
-
-  .actor-character {
+  .genre-pill {
+    background: var(--color-accent-blue);
+    color: #fff;
+    border-radius: 12px;
+    padding: 2px 10px;
     font-size: 12px;
-    color: var(--color-text-tertiary);
-    margin: 0;
+    font-weight: 500;
   }
-
-  .show-more-btn {
-    margin-top: 12px;
+  .tv-stats {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+  .tv-stats .separator {
+    color: var(--color-text-tertiary);
+    opacity: 0.5;
+  }
+  .creators,
+  .networks {
+    margin: 4px 0;
+  }
+  .last-ep-btn {
     background: none;
     border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    padding: 4px 10px;
     color: var(--color-accent-blue);
-    border-radius: 10px;
-    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    display: block;
+    margin: 6px 0;
+    transition: background 0.2s;
+  }
+  .last-ep-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+  .next-ep {
+    margin: 2px 0;
+    font-style: italic;
+  }
+  .back-to-seasons {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: var(--color-text-primary);
+    border-radius: 8px;
+    padding: 4px 12px;
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
     transition: background 0.2s;
   }
+  .back-to-seasons:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
 
-  .show-more-btn:hover {
+  .carousel-section {
+    margin-top: 20px;
+  }
+  .carousel-section h3 {
+    font-size: 16px;
+    margin: 0 0 10px 0;
+    color: var(--color-text-primary);
+  }
+
+  .no-seasons-msg,
+  .no-episodes-msg {
+    text-align: center;
+    padding: 20px;
+    color: var(--color-text-secondary);
+  }
+  .loading-episodes {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 30px;
+    gap: 12px;
+    color: var(--color-text-secondary);
+  }
+  .loading-spinner {
+    width: 30px;
+    height: 30px;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    border-top-color: var(--color-accent-blue);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  .retry-btn {
     background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: var(--color-text-primary);
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    margin-top: 8px;
   }
 
   @media (max-width: 768px) {
+    .overlay {
+      padding: 12px;
+      align-items: flex-start;
+    }
+    .card {
+      max-height: 96vh;
+      border-radius: 16px;
+    }
     .content {
       flex-direction: column;
       align-items: center;
+      padding: 0 16px 16px;
+      gap: 16px;
+    }
+    .info {
+      width: 100%;
     }
     .poster-wrapper {
       width: 120px;
     }
+    .title-row {
+      flex-wrap: wrap;
+      justify-content: center;
+      text-align: center;
+    }
     h2 {
       font-size: 20px;
+      width: 100%;
+      flex: none;
     }
-    .btn-play {
+    .btn-play,
+    .btn-play-first {
       padding: 6px 14px;
       font-size: 14px;
+    }
+    .hero {
+      height: 160px;
     }
   }
 </style>

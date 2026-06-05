@@ -112,6 +112,10 @@ src/
 - **Animation** - GSAP (GreenSock)
 - **Styling** - CSS with CSS variables
 
+## FOSS Dependencies
+
+- **[XMB Background](https://github.com/fchavonet/creative_coding-xmb_wave_background)** - Beautiful animated wave background used in the home screen. Thanks to the developer for this wonderful creation!
+
 ## API Integration
 
 ### External APIs

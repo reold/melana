@@ -1,8 +1,7 @@
 <script lang="ts">
   export let url = "";
-  export let origin = "https://cineby.sc";
+  export let origin = ""; // no default, user must provide
 
-  // Callback props (Svelte 5 style)
   export let onplay: () => void = () => {};
   export let onclose: () => void = () => {};
 
@@ -23,8 +22,8 @@
       <input bind:value={url} placeholder="https://..." class="field" />
     </label>
     <label>
-      Origin (optional)
-      <input bind:value={origin} placeholder="https://..." class="field" />
+      Origin
+      <input bind:value={origin} class="field" placeholder="https://..." />
     </label>
     <div class="actions">
       <button class="btn-cancel" on:click={handleClose}>Cancel</button>
@@ -73,7 +72,7 @@
     border: none;
     background: var(--color-bg-elevated);
     color: var(--color-text-primary);
-    font-size: 14px;
+    font-size: 16px;
     outline: none;
   }
   .field:focus {

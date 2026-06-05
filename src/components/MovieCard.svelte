@@ -1,14 +1,13 @@
 <script lang="ts">
-  import Button from "./Button.svelte";
   import type { Movie } from "../lib/tmdb";
 
   export let movie: Movie | null = null;
   export let isSkeleton: boolean = false;
-
+  export let active: boolean = false;
   export let onselect: (movie: Movie, rect: DOMRect) => void = () => {};
   export let onplay: (movie: Movie) => void = () => {};
 
-  let imgEl: HTMLImageElement | undefined;
+  let cardEl: HTMLDivElement | undefined;
 
   function handlePlay(e: Event) {
     e.stopPropagation();
@@ -17,8 +16,9 @@
   }
 
   function handleCardClick() {
-    if (!movie) return;
-    const rect = imgEl?.getBoundingClientRect();
+    if (!movie || isSkeleton) return;
+    const artEl = cardEl?.querySelector(".art");
+    const rect = artEl?.getBoundingClientRect();
     if (rect) {
       onselect(movie, rect);
     }
@@ -26,7 +26,9 @@
 </script>
 
 <div
-  class={`card ${isSkeleton ? "skeleton" : ""}`}
+  bind:this={cardEl}
+  class="card {isSkeleton ? 'skeleton' : ''}"
+  class:active
   role="button"
   tabindex={isSkeleton ? -1 : 0}
   aria-label={movie ? `View details for ${movie.title}` : "Loading"}
@@ -37,8 +39,7 @@
     {#if !isSkeleton}
       {#if movie?.poster_path}
         <img
-          bind:this={imgEl}
-          src="https://image.tmdb.org/t/p/w342{movie.poster_path}"
+          src={`https://image.tmdb.org/t/p/w342${movie.poster_path}`}
           alt={movie.title}
         />
       {:else}
@@ -48,29 +49,28 @@
       <div class="skeleton-art" aria-hidden="true"></div>
     {/if}
   </div>
-
   <div class="meta">
     {#if !isSkeleton}
       <h3>{movie?.title}</h3>
-      <p class="sub">{movie?.release_date || "N/A"}</p>
-
-      <!-- Wide play button at the bottom -->
-      <button class="play-btn" on:click={handlePlay}>
-        <svg class="play-icon" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M8 5.14v14l11-7-11-7z" />
-        </svg>
-        Play
-      </button>
+      <div class="sub-row">
+        <span class="rating">
+          <svg class="star-icon" viewBox="0 0 24 24" fill="currentColor">
+            <path
+              d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.006 5.404.434c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.434 2.082-5.005Z"
+            />
+          </svg>
+          {movie?.vote_average?.toFixed(1) ?? "N/A"}
+        </span>
+        <span class="separator">•</span>
+        <span class="date">{movie?.release_date || "N/A"}</span>
+      </div>
+      <button class="play-btn" on:click={handlePlay}>Play</button>
     {:else}
       <div
         class="skeleton-line"
         style="height: 20px; width: 80%; margin-bottom: 6px;"
-        aria-hidden="true"
       ></div>
-      <p class="sub skeleton-line" style="width: 60%;" aria-hidden="true">
-        &nbsp;
-      </p>
-      <div class="skeleton-btn" aria-hidden="true"></div>
+      <div class="skeleton-btn"></div>
     {/if}
   </div>
 </div>
@@ -86,16 +86,23 @@
     box-shadow: var(--shadow-card);
     transition:
       transform 0.2s var(--timing-ease-out),
-      box-shadow 0.2s;
+      box-shadow 0.2s,
+      opacity 0.2s;
     cursor: pointer;
   }
 
-  .card:hover:not(.skeleton) {
+  .card.active {
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(1.03);
+  }
+
+  .card:hover:not(.skeleton):not(.active) {
     transform: scale(1.03);
     box-shadow: var(--shadow-elevated);
   }
 
-  .card:active:not(.skeleton) {
+  .card:active:not(.skeleton):not(.active) {
     transform: scale(0.98);
   }
 
@@ -107,12 +114,14 @@
     justify-content: center;
     position: relative;
     overflow: hidden;
+    border-radius: 12px 12px 0 0;
   }
 
   .art img {
     width: 100%;
     height: 100%;
     object-fit: cover;
+    display: block;
   }
 
   .thumb {
@@ -134,14 +143,40 @@
     color: var(--color-text-primary);
   }
 
-  .sub {
-    margin: 0 0 16px 0;
+  .sub-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 14px;
     color: var(--color-text-secondary);
     font-size: 13px;
     font-weight: 500;
   }
 
-  /* Play button */
+  .rating {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    color: var(--color-accent-orange);
+    font-weight: 600;
+  }
+
+  .star-icon {
+    width: 14px;
+    height: 14px;
+    color: var(--color-accent-orange);
+    flex-shrink: 0;
+  }
+
+  .separator {
+    color: var(--color-text-tertiary);
+    opacity: 0.5;
+  }
+
+  .date {
+    color: var(--color-text-secondary);
+  }
+
   .play-btn {
     background: var(--color-accent-green);
     color: #fff;
@@ -169,12 +204,13 @@
     height: 20px;
   }
 
-  /* Skeleton Loading */
   .card.skeleton {
     pointer-events: none;
   }
 
   .skeleton-art {
+    width: 100%;
+    height: 100%;
     background: linear-gradient(90deg, #2c2c2e 0%, #3a3a3c 50%, #2c2c2e 100%);
     background-size: 200% 100%;
     animation: skeleton-shimmer 2s infinite;
@@ -186,6 +222,8 @@
     background-size: 200% 100%;
     border-radius: 6px;
     animation: skeleton-shimmer 2s infinite;
+    display: block;
+    margin-bottom: 6px;
   }
 
   .skeleton-btn {
