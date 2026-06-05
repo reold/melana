@@ -63,6 +63,10 @@
       )
     : [];
 
+  // Derived helpers
+  $: releaseYear = movie.release_date ? movie.release_date.slice(0, 4) : "";
+  $: ratingValue = movie.vote_average?.toFixed(1) ?? null;
+
   function close() {
     if (isClosing) return;
     isClosing = true;
@@ -224,65 +228,72 @@
       </div>
 
       <div class="info">
-        <div class="title-row">
-          <h2>{movie.title}</h2>
-          {#if !isTV}
-            <button class="btn-play fade-content" on:click={handlePlay}>
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                class="play-svg"
-              >
+        <!-- Title -->
+        <h2 class="fade-content">{movie.title}</h2>
+
+        <!-- Rating + year on same line (if any) -->
+        <div class="meta-line fade-content">
+          {#if ratingValue !== null}
+            <span class="rating">
+              <svg class="star-icon" viewBox="0 0 24 24" fill="currentColor">
                 <path
                   fill-rule="evenodd"
-                  d="M4.5 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653Z"
+                  d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.006 5.404.434c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.434 2.082-5.005Z"
                   clip-rule="evenodd"
                 />
               </svg>
-              Play
-            </button>
-          {:else if tvDetails && selectedSeason && episodes.length > 0 && !loadingEpisodes}
-            <button
-              class="btn-play-first fade-content"
-              on:click={handlePlayFirstEpisode}
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                class="play-svg"
-              >
-                <path
-                  fill-rule="evenodd"
-                  d="M4.5 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653Z"
-                  clip-rule="evenodd"
-                />
-              </svg>
-              Play First
-            </button>
+              {ratingValue}
+            </span>
+          {/if}
+          {#if releaseYear}
+            <span class="year">{releaseYear}</span>
           {/if}
         </div>
 
-        <p class="release fade-content">{movie.release_date || "N/A"}</p>
-        <div class="rating">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            class="star-icon"
+        <!-- Main action button -->
+        {#if !isTV}
+          <button class="btn-play fade-content" on:click={handlePlay}>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              class="play-svg"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M4.5 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653Z"
+                clip-rule="evenodd"
+              />
+            </svg>
+            Play
+          </button>
+        {:else if tvDetails && selectedSeason && episodes.length > 0 && !loadingEpisodes}
+          <button
+            class="btn-play-first fade-content"
+            on:click={handlePlayFirstEpisode}
           >
-            <path
-              fill-rule="evenodd"
-              d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.006 5.404.434c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.434 2.082-5.005Z"
-              clip-rule="evenodd"
-            />
-          </svg>
-          {movie.vote_average?.toFixed(1) ?? "N/A"} / 10
-        </div>
-        <p class="overview fade-content">
-          {movie.overview || "No overview available."}
-        </p>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              class="play-svg"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M4.5 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653Z"
+                clip-rule="evenodd"
+              />
+            </svg>
+            Play First
+          </button>
+        {/if}
+
+        <!-- Overview -->
+        {#if movie.overview}
+          <p class="overview fade-content">
+            {movie.overview}
+          </p>
+        {/if}
 
         {#if detailsError}
           <p class="error-msg fade-content">
@@ -290,6 +301,7 @@
           </p>
         {/if}
 
+        <!-- Genres & additional meta -->
         {#if details && !detailsLoading}
           <div class="tv-meta fade-content">
             {#if details.genres?.length}
@@ -355,8 +367,10 @@
           </div>
         {/if}
 
+        <!-- Cast -->
         <CastSection {cast} />
 
+        <!-- TV section -->
         {#if isTV && tvDetails && !detailsLoading}
           <div class="fade-content">
             {#if !selectedSeason}
@@ -465,7 +479,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.7);
+    background: rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     padding: 24px;
@@ -478,9 +492,12 @@
     max-height: 90vh;
     overflow-y: auto;
     overflow-x: hidden;
-    background: var(--color-bg-surface);
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 20px;
-    box-shadow: var(--shadow-elevated);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
     opacity: 0;
     transform-origin: top left;
   }
@@ -496,7 +513,7 @@
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(10px);
-    border: none;
+    border: 1px solid rgba(255, 255, 255, 0.2);
     color: #fff;
     display: flex;
     align-items: center;
@@ -522,11 +539,7 @@
   .hero-gradient {
     position: absolute;
     inset: 0;
-    background: linear-gradient(
-      to top,
-      var(--color-bg-surface) 0%,
-      transparent 60%
-    );
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, transparent 60%);
   }
   .content {
     padding: 0 24px 24px;
@@ -555,85 +568,94 @@
     overflow-wrap: break-word;
     word-break: break-word;
   }
-  .title-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 4px;
-  }
+
+  /* Title */
   h2 {
     font-size: 24px;
     font-weight: 700;
-    margin: 0;
+    margin: 0 0 8px 0;
     letter-spacing: -0.3px;
-    flex: 1;
     will-change: transform;
   }
+
+  /* Rating & year line */
+  .meta-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+  }
+  .meta-line .rating {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--color-accent-orange);
+    font-weight: 600;
+  }
+  .star-icon {
+    width: 16px;
+    height: 16px;
+    color: var(--color-accent-orange);
+  }
+  .year {
+    color: var(--color-text-secondary);
+  }
+
+  /* Play button */
   .btn-play,
   .btn-play-first {
-    background: var(--color-accent-green);
+    width: 100%;
+    background: linear-gradient(to bottom, var(--color-accent-green), #2ecc71);
     color: #fff;
     border: none;
-    border-radius: 10px;
-    padding: 8px 18px;
-    font-size: 15px;
+    border-radius: 12px;
+    padding: 12px 18px;
+    font-size: 16px;
     font-weight: 600;
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 6px;
+    justify-content: center;
+    gap: 8px;
     transition: background 0.2s;
-    white-space: nowrap;
-    flex-shrink: 0;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    margin-bottom: 16px;
   }
   .btn-play-first {
-    background: var(--color-accent-orange);
+    background: linear-gradient(to bottom, var(--color-accent-orange), #f57c00);
   }
   .btn-play:hover {
-    background: #30b94e;
+    background: linear-gradient(to bottom, #30b94e, #28a745);
   }
   .btn-play-first:hover {
-    background: #e08600;
+    background: linear-gradient(to bottom, #e08600, #d07400);
   }
   .play-svg {
     width: 18px;
     height: 18px;
   }
-  .release {
-    font-size: 15px;
-    color: var(--color-text-secondary);
-    margin: 0 0 12px 0;
-    font-weight: 500;
-  }
-  .rating {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--color-accent-orange);
-    margin-bottom: 16px;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    will-change: transform;
-  }
-  .star-icon {
-    width: 18px;
-    height: 18px;
-    color: var(--color-accent-orange);
-  }
+
+  /* Overview */
   .overview {
     font-size: 14px;
     line-height: 1.5;
     color: var(--color-text-secondary);
-    margin-bottom: 24px;
+    margin: 0 0 20px 0;
     word-break: break-word;
     overflow-wrap: break-word;
   }
+
+  /* Error */
   .error-msg {
     color: var(--color-accent-pink);
     font-size: 14px;
     margin-bottom: 16px;
   }
+
+  /* TV meta */
   .tv-meta {
     margin-bottom: 16px;
     font-size: 13px;
@@ -669,7 +691,8 @@
     margin: 4px 0;
   }
   .last-ep-btn {
-    background: none;
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 8px;
     padding: 4px 10px;
@@ -682,14 +705,15 @@
     transition: background 0.2s;
   }
   .last-ep-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.15);
   }
   .next-ep {
     margin: 2px 0;
     font-style: italic;
   }
   .back-to-seasons {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.2);
     color: var(--color-text-primary);
     border-radius: 8px;
@@ -700,7 +724,7 @@
     transition: background 0.2s;
   }
   .back-to-seasons:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.15);
   }
 
   .carousel-section {
@@ -750,6 +774,7 @@
     margin-top: 8px;
   }
 
+  /* Responsive */
   @media (max-width: 768px) {
     .overlay {
       padding: 12px;
@@ -759,35 +784,34 @@
       max-height: 96vh;
       border-radius: 16px;
     }
+    .hero {
+      height: 140px;
+    }
     .content {
       flex-direction: column;
       align-items: center;
       padding: 0 16px 16px;
-      gap: 16px;
+      gap: 12px;
+    }
+    .poster-wrapper {
+      width: 110px;
+      margin-top: -40px;
     }
     .info {
       width: 100%;
-    }
-    .poster-wrapper {
-      width: 120px;
-    }
-    .title-row {
-      flex-wrap: wrap;
-      justify-content: center;
       text-align: center;
     }
     h2 {
       font-size: 20px;
-      width: 100%;
-      flex: none;
+      text-align: center;
+    }
+    .meta-line {
+      justify-content: center;
     }
     .btn-play,
     .btn-play-first {
-      padding: 6px 14px;
-      font-size: 14px;
-    }
-    .hero {
-      height: 160px;
+      font-size: 15px;
+      padding: 10px 16px;
     }
   }
 </style>

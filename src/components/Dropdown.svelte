@@ -44,21 +44,26 @@
     position: relative;
   }
   .dropdown-btn {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.15);
     color: var(--color-text-primary);
-    border-radius: 8px;
-    padding: 6px 12px;
+    border-radius: 12px;
+    padding: 6px 14px;
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
     display: flex;
     align-items: center;
     gap: 4px;
-    transition: background 0.2s;
+    transition:
+      background 0.2s,
+      box-shadow 0.2s;
   }
   .dropdown-btn:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   }
   .chevron {
     width: 16px;
@@ -67,18 +72,20 @@
   .dropdown-menu {
     position: absolute;
     top: 100%;
-    left: 0; /* changed from right: 0 */
+    left: 0;
     margin-top: 4px;
-    background: var(--color-bg-elevated);
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
     border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 10px;
+    border-radius: 12px;
     padding: 4px;
     display: flex;
     flex-direction: column;
-    min-width: 120px;
+    min-width: 140px;
     max-height: 240px;
     overflow-y: auto;
     z-index: 50;
-    box-shadow: var(--shadow-elevated);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
   }
 </style>

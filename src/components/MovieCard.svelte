@@ -79,11 +79,14 @@
   .card {
     display: flex;
     flex-direction: column;
-    background: var(--color-bg-surface);
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 12px;
     padding: 0;
     overflow: hidden;
-    box-shadow: var(--shadow-card);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
     transition:
       transform 0.2s var(--timing-ease-out),
       box-shadow 0.2s,
@@ -99,7 +102,7 @@
 
   .card:hover:not(.skeleton):not(.active) {
     transform: scale(1.03);
-    box-shadow: var(--shadow-elevated);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.8);
   }
 
   .card:active:not(.skeleton):not(.active) {
@@ -134,6 +137,8 @@
     flex: 1;
     display: flex;
     flex-direction: column;
+    position: relative;
+    z-index: 1;
   }
 
   h3 {
@@ -178,10 +183,10 @@
   }
 
   .play-btn {
-    background: var(--color-accent-green);
+    background: linear-gradient(to bottom, var(--color-accent-green), #2ecc71);
     color: #fff;
     border: none;
-    border-radius: 10px;
+    border-radius: 12px;
     padding: 10px 0;
     width: 100%;
     font-size: 15px;
@@ -191,12 +196,19 @@
     align-items: center;
     justify-content: center;
     gap: 6px;
-    transition: background 0.2s;
+    transition:
+      background 0.2s,
+      transform 0.1s;
     margin-top: auto;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   }
 
   .play-btn:hover {
-    background: #30b94e;
+    background: linear-gradient(to bottom, #30b94e, #28a745);
+  }
+
+  .play-btn:active {
+    transform: scale(0.97);
   }
 
   .play-icon {
@@ -206,19 +218,30 @@
 
   .card.skeleton {
     pointer-events: none;
+    background: rgba(255, 255, 255, 0.05);
   }
 
   .skeleton-art {
     width: 100%;
     height: 100%;
-    background: linear-gradient(90deg, #2c2c2e 0%, #3a3a3c 50%, #2c2c2e 100%);
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.05) 0%,
+      rgba(255, 255, 255, 0.1) 50%,
+      rgba(255, 255, 255, 0.05) 100%
+    );
     background-size: 200% 100%;
     animation: skeleton-shimmer 2s infinite;
   }
 
   .skeleton-line {
     height: 12px;
-    background: linear-gradient(90deg, #2c2c2e 0%, #3a3a3c 50%, #2c2c2e 100%);
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.05) 0%,
+      rgba(255, 255, 255, 0.1) 50%,
+      rgba(255, 255, 255, 0.05) 100%
+    );
     background-size: 200% 100%;
     border-radius: 6px;
     animation: skeleton-shimmer 2s infinite;
@@ -228,10 +251,15 @@
 
   .skeleton-btn {
     height: 44px;
-    background: linear-gradient(90deg, #2c2c2e 0%, #3a3a3c 50%, #2c2c2e 100%);
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.05) 0%,
+      rgba(255, 255, 255, 0.1) 50%,
+      rgba(255, 255, 255, 0.05) 100%
+    );
     background-size: 200% 100%;
     border: none;
-    border-radius: 10px;
+    border-radius: 12px;
     animation: skeleton-shimmer 2s infinite;
     margin-top: auto;
   }

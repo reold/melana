@@ -19,19 +19,22 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(12px);
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(20px);
   }
 
   .loading-card {
-    background: var(--color-bg-surface);
-    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 20px;
     padding: 32px 40px;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 16px;
-    box-shadow: var(--shadow-elevated);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
     min-width: 280px;
   }
 
@@ -53,7 +56,7 @@
   .progress-fill {
     height: 100%;
     width: 40%;
-    background: var(--color-accent-blue);
+    background: linear-gradient(90deg, var(--color-accent-blue), #5e9eff);
     border-radius: 2px;
     animation: progress-indeterminate 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   }
@@ -62,7 +65,6 @@
     0% {
       transform: translateX(-100%);
     }
-
     100% {
       transform: translateX(300%);
     }

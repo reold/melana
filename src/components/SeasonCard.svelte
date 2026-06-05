@@ -45,19 +45,22 @@
 <style>
   .season-card {
     width: 180px;
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 2px solid transparent;
     border-radius: 12px;
     overflow: hidden;
     cursor: pointer;
     transition:
       transform 0.2s,
-      box-shadow 0.2s;
-    position: relative;
-    border: 2px solid transparent;
+      box-shadow 0.2s,
+      border-color 0.2s;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   }
   .season-card:hover {
     transform: translateY(-4px);
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.6);
   }
   .season-card.pending {
     opacity: 0.7;
@@ -67,6 +70,7 @@
   }
   .season-card.highlight {
     border-color: var(--color-accent-blue);
+    box-shadow: 0 0 12px rgba(0, 122, 255, 0.4);
   }
   .season-poster {
     width: 100%;

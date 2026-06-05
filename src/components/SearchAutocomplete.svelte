@@ -145,7 +145,7 @@
   }
   .search-input {
     flex: 1;
-    padding: 10px 40px 10px 16px;
+    padding: 10px 56px 10px 16px; /* increased right padding */
     border-radius: 20px;
     border: none;
     background: var(--color-bg-elevated);
@@ -166,7 +166,7 @@
 
   .clear-btn {
     position: absolute;
-    right: 48px;
+    right: 56px; /* moved further left */
     top: 50%;
     transform: translateY(-50%);
     background: none;

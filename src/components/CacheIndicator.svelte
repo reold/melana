@@ -13,7 +13,6 @@
   $: isCritical = (healthInfo?.cache.utilization_percent ?? 0) >= 90;
   $: isDisabled = loading || !healthInfo;
 
-  // Shine animation on cache update
   afterUpdate(() => {
     if (cacheJustUpdated && buttonEl) {
       buttonEl.animate(
@@ -92,10 +91,12 @@
   }
 
   .cache-btn {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 8px;
-    padding: 6px 12px;
+    border-radius: 12px;
+    padding: 6px 14px;
     font-size: 13px;
     font-weight: 500;
     color: var(--color-text-primary);
@@ -110,7 +111,7 @@
   }
 
   .cache-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.15);
   }
 
   .cache-btn:disabled {
@@ -155,11 +156,15 @@
     position: absolute;
     top: 100%;
     right: 0;
-    margin-top: 4px;
+    margin-top: 8px;
     z-index: 999;
-    padding: 0;
-    background: none;
-    box-shadow: none;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 16px;
+    padding: 8px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
   }
 
   @keyframes spin {

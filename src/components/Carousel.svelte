@@ -24,7 +24,17 @@
     on:click={() => shift(-1)}
     disabled={atStart}
   >
-    ‹
+    <svg
+      class="chevron"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
+      <path d="M15 18l-6-6 6-6" />
+    </svg>
   </button>
   <div
     bind:this={viewport}
@@ -44,7 +54,17 @@
     </div>
   </div>
   <button class="carousel-btn right" on:click={() => shift(1)} disabled={atEnd}>
-    ›
+    <svg
+      class="chevron"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
+      <path d="M9 18l6-6-6-6" />
+    </svg>
   </button>
 </div>
 
@@ -56,10 +76,11 @@
     min-width: 0;
   }
   .carousel-btn {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.2);
     color: #fff;
-    font-size: 24px;
     width: 32px;
     height: 32px;
     display: flex;
@@ -68,14 +89,23 @@
     cursor: pointer;
     border-radius: 50%;
     flex-shrink: 0;
-    transition: background 0.2s;
+    transition:
+      background 0.2s,
+      box-shadow 0.2s;
+    padding: 0;
   }
   .carousel-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   }
   .carousel-btn:disabled {
     opacity: 0.3;
     cursor: not-allowed;
+  }
+  .chevron {
+    width: 20px;
+    height: 20px;
+    display: block;
   }
   .carousel-viewport {
     flex: 1;
@@ -104,12 +134,12 @@
   }
   .carousel-viewport::before {
     left: 0;
-    background: linear-gradient(to right, var(--color-bg-surface), transparent);
+    background: linear-gradient(to right, rgba(0, 0, 0, 0.5), transparent);
     opacity: 0;
   }
   .carousel-viewport::after {
     right: 0;
-    background: linear-gradient(to left, var(--color-bg-surface), transparent);
+    background: linear-gradient(to left, rgba(0, 0, 0, 0.5), transparent);
     opacity: 0;
   }
   .carousel-viewport.darken-left::before {

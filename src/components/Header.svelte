@@ -8,7 +8,6 @@
 
 <header class="topbar">
   <div class="logo">
-    <!-- Aurora behind both icon and text -->
     <div class="aurora">
       <div class="aurora__item"></div>
       <div class="aurora__item"></div>
@@ -45,7 +44,7 @@
     align-items: center;
     justify-content: space-between;
     margin-bottom: 32px;
-    gap: 20px;
+    gap: 10px;
   }
 
   .logo {
@@ -55,31 +54,31 @@
     align-items: center;
     gap: 8px;
     flex-shrink: 0;
-    background: var(--color-bg-dark);
+    background: transparent;
   }
 
   .logo-icon {
-    width: 40px;
-    height: 40px;
+    width: 45px;
+    height: 45px;
     color: #fff;
     flex-shrink: 0;
     position: relative;
-    z-index: 1; /* above aurora */
+    z-index: 1;
   }
 
   .logo-text {
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter",
       sans-serif;
-    font-size: 42px;
+    font-size: 45px;
     font-weight: 900;
     letter-spacing: -0.5px;
     margin: 0;
     color: #fff;
     position: relative;
-    z-index: 1; /* above aurora */
+    z-index: 1;
   }
 
-  /* Aurora – covers the whole .logo container */
+  /* Aurora unchanged */
   .aurora {
     position: absolute;
     top: 0;
@@ -101,7 +100,6 @@
     mix-blend-mode: overlay;
   }
 
-  /* … unchanged animation definitions … */
   .aurora__item:nth-of-type(1) {
     background-color: #00c2ff;
     top: -50%;

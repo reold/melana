@@ -54,6 +54,9 @@
     align-items: center;
     gap: 8px;
     background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 20px;
     padding: 6px 14px 6px 6px;
     max-width: 100%;
@@ -68,7 +71,7 @@
     width: 30px;
     height: 30px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.15);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -94,10 +97,11 @@
   }
   .show-more-btn {
     margin-top: 12px;
-    background: none;
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.2);
     color: var(--color-accent-blue);
-    border-radius: 10px;
+    border-radius: 12px;
     padding: 6px 14px;
     font-size: 13px;
     font-weight: 500;
@@ -105,6 +109,6 @@
     transition: background 0.2s;
   }
   .show-more-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.15);
   }
 </style>

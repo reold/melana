@@ -112,7 +112,10 @@
   .episode-card {
     flex-shrink: 0;
     width: 180px;
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 2px solid transparent;
     border-radius: 12px;
     overflow: hidden;
     cursor: pointer;
@@ -121,11 +124,11 @@
       box-shadow 0.2s,
       border-color 0.2s;
     position: relative;
-    border: 2px solid transparent;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   }
   .episode-card:hover {
     transform: translateY(-4px);
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.6);
   }
   .episode-card.selected {
     border-color: var(--color-accent-blue);
@@ -184,8 +187,9 @@
     position: absolute;
     top: 8px;
     right: 8px;
-    background: rgba(0, 0, 0, 0.7);
-    border: none;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 50%;
     width: 30px;
     height: 30px;
@@ -194,6 +198,10 @@
     justify-content: center;
     cursor: pointer;
     z-index: 2;
+    transition: background 0.2s;
+  }
+  .btn-play-ep:hover {
+    background: rgba(0, 0, 0, 0.8);
   }
   .play-svg-ep {
     width: 16px;
@@ -221,7 +229,8 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 12px;
     padding: 2px 8px 2px 4px;
     font-size: 10px;
@@ -237,7 +246,7 @@
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.15);
     display: flex;
     align-items: center;
     justify-content: center;
