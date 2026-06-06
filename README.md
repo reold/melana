@@ -96,6 +96,11 @@ src/
 - Automatic buffer coordination
 - User presence tracking
 
+## Sample UI Images
+
+<img width="2400" height="3153" alt="Melana Home View" src="https://github.com/user-attachments/assets/98c89ce7-4913-4aab-8af4-2a964f7e54c8" />
+<img width="2400" height="2523" alt="Melana Watch View Playing Eternal Sunshine of The Spotless Mind" src="https://github.com/user-attachments/assets/b869e195-a30a-4ab7-a80f-c4db897b60a8" />
+
 ### Server Monitoring
 
 - Real-time cache utilization display
