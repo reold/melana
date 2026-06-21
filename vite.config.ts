@@ -5,19 +5,20 @@ export default defineConfig({
   plugins: [svelte()],
   base: "/melana/",
   build: {
+    // Aligns your bundle with modern browser baselines
+    target: "es2022",
     rollupOptions: {
       output: {
-        // Split heavy vendor libraries into their own chunks
         manualChunks(id) {
+          // Explicitly isolate massive third-party assets
           if (id.includes("hls.js") || id.includes("hls/")) {
             return "vendor-hls";
           }
           if (id.includes("gsap")) {
             return "vendor-gsap";
           }
-          if (id.includes("node_modules")) {
-            return "vendor";
-          }
+          // REMOVED: catch-all "vendor" string block.
+          // Vite naturally splits standard node_modules far more efficiently.
         },
       },
     },
