@@ -1,4 +1,7 @@
-# Melana Frontend
+<div align="center">
+  <img src="public/favicon.svg" alt="Melana Logo" width="250" />
+  <h1>Melana Frontend</h1>
+</div>
 
 A modern, responsive web interface for the Melana movie streaming platform. Built with Svelte, TypeScript, and Vite for a fast, interactive user experience.
 
