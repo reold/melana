@@ -31,7 +31,6 @@
     EpisodePlayRequest,
     SyncRoom,
   } from "./lib/appTypes";
-  import "./styles/global.css";
 
   let WatchComponent: any = null;
   let MoviePopupComponent: any = null;

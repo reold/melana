@@ -54,8 +54,8 @@
     align-items: center;
     gap: 8px;
     background: rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 20px;
     padding: 6px 14px 6px 6px;

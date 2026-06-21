@@ -80,8 +80,8 @@
     display: flex;
     flex-direction: column;
     background: rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 12px;
     padding: 0;

@@ -11,7 +11,7 @@
   import { debounce } from "../lib/utils";
   import { SORT_OPTIONS } from "../lib/mediaCatalog";
   import { createCatalogStore } from "../lib/catalogStore";
-  import { createXmbBackground } from "../lib/xmbBackground"; // <-- new
+  import { createXmbBackground } from "../lib/xmbBackground";
 
   export let healthInfo: HealthInfo | null = null;
   export let cacheJustUpdated = false;
@@ -21,8 +21,8 @@
   export let onplay: (movie: Movie) => void = () => {};
   export let onJoinRoom: () => void = () => {};
   export let onCustomStream: () => void = () => {};
-  export let currentSource: string = "videasy"; // <-- bound from App
-  export let onSourceChange: (value: string) => void = () => {}; // <-- new
+  export let currentSource: string = "videasy";
+  export let onSourceChange: (value: string) => void = () => {};
 
   const catalog = createCatalogStore();
   const {
@@ -50,7 +50,7 @@
   let destroyXmb: (() => void) | undefined;
 
   onMount(async () => {
-    destroyXmb = createXmbBackground(); // start wave background
+    destroyXmb = createXmbBackground();
     await loadFirstPage({ query, mediaType, sort: currentSort, page: 1 });
     searchInput?.focus();
     previousQuery = query;
@@ -60,7 +60,7 @@
   });
 
   onDestroy(() => {
-    destroyXmb?.(); // clean up background
+    destroyXmb?.();
   });
 
   const runSearch = () => {
@@ -114,7 +114,6 @@
     loadMore({ query, mediaType, sort: currentSort, page: 0 });
   }
 
-  // Helper that updates both local state and propagates to parent
   function handleSourceChange(value: string) {
     currentSource = value;
     onSourceChange(value);
@@ -133,7 +132,6 @@
         onchange={(value) => (currentSort = value)}
       />
     {/if}
-    <!-- Fixed: propagate change to parent -->
     <SourceDropdown selected={currentSource} onchange={handleSourceChange} />
 
     <button class="join-room-btn" on:click={onJoinRoom}>
@@ -259,21 +257,27 @@
     font-weight: 600;
     cursor: pointer;
   }
+
+  /* Blue-tinted liquid glass floating button */
   .floating-custom-btn {
     position: fixed;
     bottom: 32px;
     right: 32px;
     z-index: 999;
-    background: var(--color-accent-blue);
+    background: rgba(0, 122, 255, 0.2);
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.25);
     color: #fff;
-    border: none;
     border-radius: 50%;
     padding: 16px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 4px 16px rgba(0, 122, 255, 0.4);
+    box-shadow:
+      0 8px 24px rgba(0, 122, 255, 0.35),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
     transition:
       transform 0.2s,
       box-shadow 0.2s,
@@ -281,16 +285,21 @@
   }
   .floating-custom-btn:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 24px rgba(0, 122, 255, 0.55);
-    background: #0070e9;
+    box-shadow:
+      0 12px 32px rgba(0, 122, 255, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    background: rgba(0, 122, 255, 0.3);
   }
   .floating-custom-btn:active {
     transform: translateY(0);
-    box-shadow: 0 2px 8px rgba(0, 122, 255, 0.4);
+    box-shadow:
+      0 4px 12px rgba(0, 122, 255, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.15);
   }
   .plus-icon {
     width: 24px;
     height: 24px;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
   }
   @media (max-width: 768px) {
     .wrap {

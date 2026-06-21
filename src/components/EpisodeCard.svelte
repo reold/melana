@@ -113,8 +113,8 @@
     flex-shrink: 0;
     width: 180px;
     background: rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
     border: 2px solid transparent;
     border-radius: 12px;
     overflow: hidden;

@@ -480,8 +480,8 @@
     align-items: center;
     justify-content: center;
     background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
     padding: 24px;
     opacity: 0;
   }
@@ -493,8 +493,8 @@
     overflow-y: auto;
     overflow-x: hidden;
     background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(30px);
     -webkit-backdrop-filter: blur(30px);
+    backdrop-filter: blur(30px);
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 20px;
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
