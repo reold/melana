@@ -68,7 +68,7 @@
   .logo-icon {
     width: 45px;
     height: 45px;
-    color: #fff; /* Makes the new SVG white */
+    color: #fff;
     flex-shrink: 0;
     position: relative;
     z-index: 1;
@@ -76,7 +76,7 @@
 
   .logo-text {
     font-size: 45px;
-    font-weight: 900;
+    font-weight: 700;
     letter-spacing: -0.5px;
     margin: 0;
     color: #fff;
@@ -84,7 +84,6 @@
     z-index: 1;
   }
 
-  /* Aurora unchanged */
   .aurora {
     position: absolute;
     top: 0;
@@ -97,135 +96,76 @@
   }
 
   .aurora__item {
-    overflow: hidden;
     position: absolute;
+    top: 0;
+    left: 0;
     width: 60vw;
     height: 60vw;
-    border-radius: 37% 29% 27% 27% / 28% 25% 41% 37%;
+    border-radius: 40%;
     filter: blur(1rem);
     mix-blend-mode: overlay;
+    will-change: transform;
   }
 
   .aurora__item:nth-of-type(1) {
     background-color: #00c2ff;
-    top: -50%;
-    right: 0;
-    animation:
-      aurora-border 6s ease-in-out infinite,
-      aurora-1 12s ease-in-out infinite alternate;
+    animation: aurora-1 12s ease-in-out infinite alternate;
   }
   .aurora__item:nth-of-type(2) {
     background-color: #ffc640;
-    right: 0;
-    top: 0;
-    animation:
-      aurora-border 6s ease-in-out infinite,
-      aurora-2 12s ease-in-out infinite alternate;
+    animation: aurora-2 12s ease-in-out infinite alternate;
   }
   .aurora__item:nth-of-type(3) {
     background-color: #33ff8c;
-    left: 0;
-    bottom: 0;
-    animation:
-      aurora-border 6s ease-in-out infinite,
-      aurora-3 8s ease-in-out infinite alternate;
+    animation: aurora-3 8s ease-in-out infinite alternate;
   }
   .aurora__item:nth-of-type(4) {
     background-color: #e54cff;
-    right: 0;
-    bottom: -50%;
-    animation:
-      aurora-border 6s ease-in-out infinite,
-      aurora-4 24s ease-in-out infinite alternate;
+    animation: aurora-4 24s ease-in-out infinite alternate;
   }
 
   @keyframes aurora-1 {
     0% {
-      top: 0;
-      right: 0;
+      transform: translate(-20%, -20%) scale(1) rotate(0deg);
     }
     50% {
-      top: 100%;
-      right: 75%;
-    }
-    75% {
-      top: 100%;
-      right: 25%;
+      transform: translate(30%, 40%) scale(1.2) rotate(90deg);
     }
     100% {
-      top: 0;
-      right: 0;
+      transform: translate(-20%, -20%) scale(1) rotate(180deg);
     }
   }
   @keyframes aurora-2 {
     0% {
-      top: -50%;
-      left: 0%;
+      transform: translate(20%, -20%) scale(1) rotate(0deg);
     }
-    60% {
-      top: 100%;
-      left: 75%;
-    }
-    85% {
-      top: 100%;
-      left: 25%;
+    50% {
+      transform: translate(-30%, 40%) scale(1.3) rotate(-90deg);
     }
     100% {
-      top: -50%;
-      left: 0%;
+      transform: translate(20%, -20%) scale(1) rotate(-180deg);
     }
   }
   @keyframes aurora-3 {
     0% {
-      bottom: 0;
-      left: 0;
+      transform: translate(-20%, 20%) scale(1) rotate(0deg);
     }
-    40% {
-      bottom: 100%;
-      left: 75%;
-    }
-    65% {
-      bottom: 40%;
-      left: 50%;
+    50% {
+      transform: translate(30%, -40%) scale(1.2) rotate(90deg);
     }
     100% {
-      bottom: 0;
-      left: 0;
+      transform: translate(-20%, 20%) scale(1) rotate(180deg);
     }
   }
   @keyframes aurora-4 {
     0% {
-      bottom: -50%;
-      right: 0;
+      transform: translate(20%, 20%) scale(1) rotate(0deg);
     }
     50% {
-      bottom: 0%;
-      right: 40%;
-    }
-    90% {
-      bottom: 50%;
-      right: 25%;
+      transform: translate(-30%, -40%) scale(1.1) rotate(-90deg);
     }
     100% {
-      bottom: -50%;
-      right: 0;
-    }
-  }
-  @keyframes aurora-border {
-    0% {
-      border-radius: 37% 29% 27% 27% / 28% 25% 41% 37%;
-    }
-    25% {
-      border-radius: 47% 29% 39% 49% / 61% 19% 66% 26%;
-    }
-    50% {
-      border-radius: 57% 23% 47% 72% / 63% 17% 66% 33%;
-    }
-    75% {
-      border-radius: 28% 49% 29% 100% / 93% 20% 64% 25%;
-    }
-    100% {
-      border-radius: 37% 29% 27% 27% / 28% 25% 41% 37%;
+      transform: translate(20%, 20%) scale(1) rotate(-180deg);
     }
   }
 
