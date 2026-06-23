@@ -75,8 +75,6 @@
   }
 
   .logo-text {
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter",
-      sans-serif;
     font-size: 45px;
     font-weight: 900;
     letter-spacing: -0.5px;

@@ -1,6 +1,3 @@
-/* Apple system fonts */
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
-
 :root {
   /* Apple-style dark palette */
   --color-bg-dark: #000000;
@@ -38,7 +35,8 @@ html {
 body {
   margin: 0;
   font-family:
-    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", sans-serif;
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter Variable",
+    sans-serif;
   background: var(--color-bg-dark);
   color: var(--color-text-primary);
   line-height: 1.5;

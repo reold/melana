@@ -33,6 +33,8 @@
     EpisodePlayRequest,
     SyncRoom,
   } from "./lib/appTypes";
+  import "@fontsource-variable/inter";
+  // import "@fontsource-variable/inter/files/inter-latin-wght-normal.css";
 
   // ─── Auth ────────────────────────────────────
   import { currentUser, initAuth } from "./lib/auth";
