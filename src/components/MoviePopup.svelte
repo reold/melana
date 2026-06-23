@@ -560,7 +560,6 @@
     box-shadow: var(--shadow-elevated);
     object-fit: cover;
     border: 1px solid rgba(255, 255, 255, 0.1);
-    will-change: transform;
   }
   .info {
     flex: 1;

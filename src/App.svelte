@@ -85,7 +85,6 @@
 
   onMount(() => {
     health.start();
-    void warmLazyComponents();
     void handleHashChange();
     window.addEventListener("hashchange", handleHashChange);
 
