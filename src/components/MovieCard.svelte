@@ -4,6 +4,15 @@
   export let movie: Movie | null = null;
   export let isSkeleton: boolean = false;
   export let active: boolean = false;
+  // priority: image network priority + isolated compositing for the first N cards.
+  //          Drives <img loading="eager" fetchpriority="high" decoding="sync">.
+  //          The N should be small (3) — every eager image competes for bandwidth.
+  export let priority: boolean = false;
+  // eager: paint priority — the card opts out of the content-visibility: auto
+  //        skip and renders immediately. Use this for "above the fold" cards
+  //        that aren't already priority (e.g. cards 4-6 on a 2x display).
+  //        Does NOT change image network behavior.
+  export let eager: boolean = false;
   export let onselect: (movie: Movie, rect: DOMRect) => void = () => {};
   export let onplay: (movie: Movie) => void = () => {};
 
@@ -29,6 +38,8 @@
   bind:this={cardEl}
   class="card {isSkeleton ? 'skeleton' : ''}"
   class:active
+  class:priority
+  class:eager
   role="button"
   tabindex={isSkeleton ? -1 : 0}
   aria-label={movie ? `View details for ${movie.title}` : "Loading"}
@@ -39,7 +50,17 @@
     {#if !isSkeleton}
       {#if movie?.poster_path}
         <img
-          src={`https://image.tmdb.org/t/p/w342${movie.poster_path}`}
+          src={`https://image.tmdb.org/t/p/w185${movie.poster_path}`}
+          srcset={`
+            https://image.tmdb.org/t/p/w185${movie.poster_path} 185w,
+            https://image.tmdb.org/t/p/w342${movie.poster_path} 342w,
+            https://image.tmdb.org/t/p/w500${movie.poster_path} 500w,
+
+          `}
+          sizes="(max-width: 480px) 140px, (max-width: 768px) 160px, 200px"
+          loading={priority ? "eager" : "lazy"}
+          fetchpriority={priority ? "high" : "auto"}
+          decoding={priority ? "sync" : "async"}
           alt={movie.title}
         />
       {:else}
@@ -92,6 +113,24 @@
       box-shadow 0.2s,
       opacity 0.2s;
     cursor: pointer;
+
+    /* Off-screen cards skip layout + paint. Browser uses intrinsic-size
+       as a placeholder so the scrollbar doesn't jump on reveal. */
+    content-visibility: auto;
+    contain-intrinsic-size: 200px 430px;
+  }
+
+  /* Image-priority cards get an isolated render subtree. No content-visibility
+     override here — the .eager class below handles paint priority separately. */
+  .card.priority {
+    contain: layout paint;
+  }
+
+  /* Eager cards opt out of the content-visibility: auto skip. They paint
+     immediately whether on screen or not, so they're ready the moment the
+     user scrolls. Does NOT trigger network fetches. */
+  .card.eager {
+    content-visibility: visible;
   }
 
   .card.active {
@@ -110,7 +149,7 @@
   }
 
   .art {
-    height: 280px;
+    aspect-ratio: 2 / 3;
     background: #2c2c2e;
     display: flex;
     align-items: center;
@@ -275,7 +314,7 @@
 
   @media (max-width: 480px) {
     .art {
-      height: 220px;
+      /* aspect-ratio is already set, no height override needed */
     }
   }
 </style>

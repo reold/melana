@@ -11,6 +11,16 @@
   export let onplay: (movie: Movie) => void = () => {};
   export let onLoadMore: () => void = () => {};
 
+  // First 3 cards get network-level image priority (fetchpriority="high",
+  // loading="eager", decoding="sync"). Keep this small — every priority
+  // image competes for bandwidth with the LCP image.
+  const PRIORITY_COUNT = 3;
+
+  // First 6 cards get paint-level priority via content-visibility: visible.
+  // They opt out of the auto-skip and render eagerly. This is free at the
+  // network level — only changes whether the browser does the paint work.
+  const EAGER_COUNT = 6;
+
   let sentinel: HTMLDivElement;
   let observer: IntersectionObserver;
 
@@ -42,8 +52,14 @@
   {:else if movies.length === 0}
     <div class="empty">No movies found!</div>
   {:else}
-    {#each movies as movie (movie.id)}
-      <MovieCard {movie} {onselect} {onplay} />
+    {#each movies as movie, i (movie.id)}
+      <MovieCard
+        {movie}
+        {onselect}
+        {onplay}
+        priority={i < PRIORITY_COUNT}
+        eager={i < EAGER_COUNT}
+      />
     {/each}
     {#if loadingMore}
       {#each Array(6) as _, i}
