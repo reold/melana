@@ -1,9 +1,11 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
+  import { get } from "svelte/store";
   import HomeView from "./components/HomeView.svelte";
   import LoadingOverlay from "./components/LoadingOverlay.svelte";
   import CustomStreamDialog from "./components/CustomStreamDialog.svelte";
   import JoinRoomDialog from "./components/JoinRoomDialog.svelte";
+  import AuthRequiredDialog from "./components/AuthRequiredDialog.svelte";
   import type { CastMember, Movie } from "./lib/tmdb";
   import { createHealthMonitor } from "./lib/healthMonitor";
   import {
@@ -32,6 +34,9 @@
     SyncRoom,
   } from "./lib/appTypes";
 
+  // ─── Auth ────────────────────────────────────
+  import { currentUser, initAuth } from "./lib/auth";
+
   let WatchComponent: any = null;
   let MoviePopupComponent: any = null;
   let selectedMovie: Movie | null = null;
@@ -56,16 +61,34 @@
   let customStreamOrigin = "";
   let skipNextHashChange = false;
 
-  let currentSource: string = "vidlink"; // <-- new state
+  let currentSource: string = "vidlink";
   let playCounter = 0;
 
+  // ─── Auth dialog state ──────────────────────
+  let showAuthDialog = false;
+  let authResolve: (() => void) | null = null;
+  let authReject: (() => void) | null = null;
+
   const health = createHealthMonitor();
+
+  // ─── Reactive page title ────────────────────
+  $: pageTitle =
+    view === "home"
+      ? selectedMovie
+        ? `Viewing ${selectedMovie.title} - Melana`
+        : "Melana"
+      : watchMovie
+        ? `Watching ${watchMovie.title} - Melana`
+        : "Melana";
 
   onMount(() => {
     health.start();
     void warmLazyComponents();
     void handleHashChange();
     window.addEventListener("hashchange", handleHashChange);
+
+    // silently verify existing token
+    initAuth();
   });
 
   onDestroy(() => {
@@ -210,12 +233,38 @@
     }
   }
 
-  // Updated handlers to pass currentSource
+  // ─── Auth gate ──────────────────────────────
+  async function ensureAuth(): Promise<boolean> {
+    const user = get(currentUser);
+    if (user) return true;
+    return new Promise((resolve, reject) => {
+      showAuthDialog = true;
+      authResolve = () => {
+        showAuthDialog = false;
+        resolve(true);
+      };
+      authReject = () => {
+        showAuthDialog = false;
+        reject(new Error("User cancelled"));
+      };
+    });
+  }
+
+  function handleAuthSuccess() {
+    authResolve?.();
+  }
+
+  function handleAuthCancel() {
+    authReject?.();
+  }
+
+  // ─── Play handlers (gated) ──────────────────
   async function handlePlay(movie: Movie) {
     if (movie.media_type === "tv") {
       alert("Select an episode from the show details to start watching.");
       return;
     }
+    if (!(await ensureAuth().catch(() => false))) return;
     await runPlaybackTransition(
       (onProgress) => buildMovieWatchPayload(movie, onProgress, currentSource),
       "Could not load stream. Try another movie.",
@@ -223,6 +272,7 @@
   }
 
   async function handlePlayEpisode(episodeData: EpisodePlayRequest) {
+    if (!(await ensureAuth().catch(() => false))) return;
     await runPlaybackTransition(
       (onProgress) =>
         buildEpisodeWatchPayload(episodeData, onProgress, currentSource),
@@ -231,6 +281,7 @@
   }
 
   async function handleCustomStream() {
+    if (!(await ensureAuth().catch(() => false))) return;
     await runPlaybackTransition(
       (onProgress) =>
         buildCustomWatchPayload(
@@ -268,7 +319,7 @@
     name="viewport"
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
   />
-  <title>Melana</title>
+  <title>{pageTitle}</title>
 </svelte:head>
 
 {#if view === "home"}
@@ -337,5 +388,12 @@
     bind:origin={customStreamOrigin}
     onplay={handleCustomStream}
     onclose={() => (showCustomStream = false)}
+  />
+{/if}
+
+{#if showAuthDialog}
+  <AuthRequiredDialog
+    onclose={handleAuthCancel}
+    onsuccess={handleAuthSuccess}
   />
 {/if}
