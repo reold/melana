@@ -34,10 +34,9 @@
     SyncRoom,
   } from "./lib/appTypes";
   import "@fontsource-variable/inter";
-  // import "@fontsource-variable/inter/files/inter-latin-wght-normal.css";
 
   // ─── Auth ────────────────────────────────────
-  import { currentUser, initAuth } from "./lib/auth";
+  import { currentUser, initAuth } from "reold-shared";
 
   let WatchComponent: any = null;
   let MoviePopupComponent: any = null;
@@ -54,6 +53,7 @@
   let watchEpisodeId: number | undefined = undefined;
   let watchSeasonNumber: number | undefined = undefined;
   let watchShowId: number | undefined = undefined;
+  let watchStreamType: "hls" | "mp4" | undefined = undefined; // new
   let isTransitioning = false;
   let progressMessage = "";
   let showJoinRoom = false;
@@ -158,6 +158,7 @@
     watchEpisodeId = undefined;
     watchSeasonNumber = undefined;
     watchShowId = undefined;
+    watchStreamType = undefined;
     await ensureMoviePopupComponent();
   }
 
@@ -206,6 +207,7 @@
     watchStreamUrl = payload.streamUrl;
     watchSubtitles = payload.subtitles;
     watchSources = payload.sources;
+    watchStreamType = payload.streamType; // capture stream type
     watchEpisodeId = payload.episodeId;
     watchSeasonNumber = payload.seasonNumber;
     watchShowId = payload.tvShowId;
@@ -307,6 +309,7 @@
     watchEpisodeId = undefined;
     watchSeasonNumber = undefined;
     watchShowId = undefined;
+    watchStreamType = undefined;
   }
 
   function handleJoinRoom(username: string, roomId: string) {
@@ -366,6 +369,7 @@
     seasonNumber={watchSeasonNumber}
     showId={watchShowId}
     playId={playCounter}
+    streamType={watchStreamType}
     onplayEpisode={handlePlayEpisode}
     onselectEpisode={handleSelectEpisode}
     onplay={handlePlay}
