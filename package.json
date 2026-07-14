@@ -23,6 +23,10 @@
   "type": "module",
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
-    "hls.js": "^1.6.16"
-  }
+    "hls.js": "^1.6.16",
+    "reold-shared": "github:reold/reold-shared"
+  },
+  "trustedDependencies": [
+    "reold-shared"
+  ]
 }
